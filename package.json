@@ -1,0 +1,32 @@
+{
+  "name": "duseum",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "lambdas/*",
+    "packages/shared",
+    "infrastructure"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "build:lambdas": "turbo run build:lambdas",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "dev:lambdas": "tsx watch --env-file=.env.local scripts/dev-server.ts",
+    "dev": "concurrently --names \"ministack,lambdas\" --prefix-colors \"cyan,green\" \"docker-compose up -d\" \"npm run dev:lambdas\""
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "aws-lambda": "^1.0.7",
+    "concurrently": "^9.1.2",
+    "dotenv": "^16.4.7",
+    "express": "^5.0.1",
+    "turbo": "^2.3.3",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,80 @@
+name: Build Lambdas (reusable)
+
+# Builds all Lambda functions with esbuild (tree-shaken, bundled, minified,
+# node20 target) and uploads ZIPs to the S3 artifact bucket at:
+#   s3://duseum-dev-lambda-artifacts/{sha}/{name}/function.zip
+#
+# Prerequisite: S3 bucket duseum-dev-lambda-artifacts must exist in account
+# 408141212087 (created once manually or via bootstrap script).
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        required: true
+        type: string
+        description: Git SHA used as the S3 prefix for this build
+    outputs:
+      artifact-bucket:
+        description: S3 bucket where ZIPs were uploaded
+        value: ${{ jobs.build.outputs.artifact-bucket }}
+    secrets:
+      AWS_ROLE_ARN_BUILD:
+        required: true
+        description: IAM role ARN for S3 upload (deploy-dev role has s3:PutObject on artifact bucket)
+
+jobs:
+  build:
+    name: Build & Upload Lambda ZIPs
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-bucket: ${{ steps.upload.outputs.bucket }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      # Bundle each Lambda entry point with esbuild into a single JS file,
+      # then zip it. External @aws-sdk/* is provided by the Lambda runtime.
+      - name: Bundle lambdas with esbuild
+        run: |
+          LAMBDAS="admin artworks auth-triggers features maintenance media notifications social subscriptions subscriptions-webhook users"
+          for NAME in $LAMBDAS; do
+            echo "=== Bundling $NAME ==="
+            mkdir -p dist/lambdas/$NAME
+            npx esbuild lambdas/$NAME/src/index.ts \
+              --bundle \
+              --minify \
+              --platform=node \
+              --target=node20 \
+              --external:@aws-sdk/* \
+              --outfile=dist/lambdas/$NAME/index.js
+            (cd dist/lambdas/$NAME && zip -j function.zip index.js)
+            echo "Built dist/lambdas/$NAME/function.zip ($(du -sh dist/lambdas/$NAME/function.zip | cut -f1))"
+          done
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_BUILD }}
+          aws-region: us-east-1
+
+      - name: Upload ZIPs to S3
+        id: upload
+        run: |
+          BUCKET="duseum-dev-lambda-artifacts"
+          SHA="${{ inputs.sha }}"
+          LAMBDAS="admin artworks auth-triggers features maintenance media notifications social subscriptions subscriptions-webhook users"
+          for NAME in $LAMBDAS; do
+            aws s3 cp dist/lambdas/$NAME/function.zip \
+              s3://$BUCKET/$SHA/$NAME/function.zip \
+              --region us-east-1
+            echo "Uploaded s3://$BUCKET/$SHA/$NAME/function.zip"
+          done
+          echo "bucket=$BUCKET" >> $GITHUB_OUTPUT

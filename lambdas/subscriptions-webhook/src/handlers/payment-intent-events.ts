@@ -1,0 +1,66 @@
+// =============================================================================
+// lambdas/subscriptions-webhook/src/handlers/payment-intent-events.ts
+// Handles payment_intent.succeeded / payment_intent.payment_failed
+// for Weekly Feature bookings — FR-FEAT-12/17
+//
+// Only acts when metadata.type === 'WEEKLY_FEATURE'. Other Payment Intents
+// (e.g. regular purchases) are logged and skipped.
+// metadata shape: { type: 'WEEKLY_FEATURE', bookingId, isoWeek, authorId }
+// =============================================================================
+
+import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
+import { updateBookingStatus } from '@duseum/shared'
+import { logger } from './logger.js'
+
+type StripePaymentIntent = {
+  id: string
+  metadata: Record<string, string>
+}
+
+const resolveBooking = (
+  pi: StripePaymentIntent
+): { isoWeek: string; authorId: string } | null => {
+  const { type, isoWeek, authorId } = pi.metadata ?? {}
+
+  if (type !== 'WEEKLY_FEATURE') {
+    logger.info('payment_intent event is not WEEKLY_FEATURE — skipping', {
+      paymentIntentId: pi.id,
+      metadataType: type,
+    })
+    return null
+  }
+
+  if (!isoWeek || !authorId) {
+    logger.warn('WEEKLY_FEATURE payment_intent missing isoWeek or authorId', {
+      paymentIntentId: pi.id,
+    })
+    return null
+  }
+
+  return { isoWeek, authorId }
+}
+
+export const handlePaymentIntentSucceeded = async (
+  client: DynamoDBDocumentClient,
+  pi: StripePaymentIntent
+): Promise<void> => {
+  const booking = resolveBooking(pi)
+  if (!booking) return
+
+  await updateBookingStatus(client, booking.isoWeek, booking.authorId, 'CONFIRMED')
+  logger.info('WeeklyFeatureBooking confirmed', booking)
+}
+
+export const handlePaymentIntentFailed = async (
+  client: DynamoDBDocumentClient,
+  pi: StripePaymentIntent
+): Promise<void> => {
+  const booking = resolveBooking(pi)
+  if (!booking) return
+
+  await updateBookingStatus(client, booking.isoWeek, booking.authorId, 'CANCELLED', {
+    cancelledAt: new Date().toISOString(),
+    cancelledBy: 'STRIPE_PAYMENT_FAILED',
+  })
+  logger.info('WeeklyFeatureBooking cancelled due to payment failure', booking)
+}

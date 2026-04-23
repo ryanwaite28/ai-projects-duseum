@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design Tokens — CSS Custom Properties (§6.8.2) ────────────────────── */
+:root {
+  --color-ink:          #0e0d0b;
+  --color-ink-soft:     #1c1a16;
+  --color-ink-raised:   #252220;
+  --color-parchment:    #f5f0e8;
+  --color-parchment-dim:#ede7d9;
+  --color-gold:         #c8973a;
+  --color-gold-light:   #e8b55a;
+  --color-gold-dim:     #8a642a;
+  --color-gold-subtle:  rgba(200, 151, 58, 0.08);
+  --color-gold-border:  rgba(200, 151, 58, 0.18);
+  --color-gold-border-strong: rgba(200, 151, 58, 0.4);
+  --color-stone:        #4a4540;
+  --color-stone-light:  #7a7068;
+  --color-white:        #fdfaf4;
+  --color-success:      #5a9e6e;
+  --color-error:        #c0544a;
+  --color-warning:      #c8973a;
+
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body:    'DM Sans', system-ui, sans-serif;
+  --font-mono:    'DM Mono', monospace;
+
+  --radius-sm:   2px;
+  --radius-md:   4px;
+  --radius-full: 9999px;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
+
+  --transition-fast:   150ms var(--ease-in-out);
+  --transition-base:   250ms var(--ease-in-out);
+  --transition-slow:   400ms var(--ease-out-expo);
+  --transition-reveal: 800ms var(--ease-out-expo);
+}
+
+/* ── Base reset ─────────────────────────────────────────────────────────── */
+@layer base {
+  body {
+    background-color: #0e0d0b;
+    color: #f5f0e8;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+/* ── Scroll Reveal (§6.8.6) ─────────────────────────────────────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 800ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 800ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-delay-1 { transition-delay: 100ms; }
+.reveal-delay-2 { transition-delay: 220ms; }
+.reveal-delay-3 { transition-delay: 360ms; }
+.reveal-delay-4 { transition-delay: 500ms; }

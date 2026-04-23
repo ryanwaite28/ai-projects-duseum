@@ -1,0 +1,40 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
+dist/
+cdk.out/
+frontend/dist/
+*.tsbuildinfo
+
+# ── Environment & secrets ──────────────────────────────────────────────────────
+.env.local
+.env.*.local
+scripts/.secrets.env
+
+# ── CDK ───────────────────────────────────────────────────────────────────────
+cdk.context.json
+
+# ── Turbo cache ───────────────────────────────────────────────────────────────
+.turbo/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+
+# ── Claude Code (local permission overrides — machine-specific) ───────────────
+.claude/settings.local.json
+
+# ── Test coverage ─────────────────────────────────────────────────────────────
+coverage/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+
+
+.claude/settings.local.json

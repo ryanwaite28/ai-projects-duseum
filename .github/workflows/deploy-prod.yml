@@ -1,0 +1,60 @@
+name: Deploy — prod
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # ── Gate: all CI checks must pass ────────────────────────────────────────────
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  # ── Build Lambda ZIPs and upload to S3 artifact bucket ──────────────────────
+  # Uses dev role since the artifact bucket lives in the shared account.
+  build:
+    name: Build
+    needs: [ci]
+    uses: ./.github/workflows/_build-lambdas.yml
+    with:
+      sha: ${{ github.sha }}
+    secrets:
+      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+
+  # ── Deploy all CDK stacks to prod ────────────────────────────────────────────
+  # The "prod" GitHub Environment requires manual approval before this job runs.
+  # Configure required reviewers in: Settings → Environments → prod.
+  deploy-prod:
+    name: Deploy (prod)
+    needs: [build]
+    uses: ./.github/workflows/_cdk-deploy.yml
+    with:
+      environment: prod
+      sha: ${{ github.sha }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+
+  # ── Post-deploy smoke tests ───────────────────────────────────────────────────
+  smoke-test:
+    name: Smoke Test (prod)
+    needs: [deploy-prod]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+          aws-region: us-east-1
+      - name: Run smoke tests
+        run: bash scripts/smoke-test.sh prod

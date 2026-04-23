@@ -1,0 +1,35 @@
+services:
+
+  ministack:
+    image: nahuelnucera/ministack:latest
+    container_name: duseum-ministack
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ministack-data:/var/lib/ministack
+    # MiniStack embeds Python+uvicorn — no curl/wget available; use python3 for healthcheck
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4566/_ministack/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  ministack-init:
+    image: amazon/aws-cli:latest
+    container_name: duseum-ministack-init
+    environment:
+      AWS_ENDPOINT_URL: http://ministack:4566
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    volumes:
+      - ./scripts/ministack-init.sh:/ministack-init.sh:ro
+    depends_on:
+      ministack:
+        condition: service_healthy
+    restart: on-failure
+    entrypoint: ["/bin/sh", "/ministack-init.sh"]
+
+volumes:
+  ministack-data:

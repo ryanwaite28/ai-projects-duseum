@@ -1,0 +1,56 @@
+name: Deploy — dev
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # ── Gate: all CI checks must pass ────────────────────────────────────────────
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  # ── Build Lambda ZIPs and upload to S3 artifact bucket ──────────────────────
+  build:
+    name: Build
+    needs: [ci]
+    uses: ./.github/workflows/_build-lambdas.yml
+    with:
+      sha: ${{ github.sha }}
+    secrets:
+      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+
+  # ── Deploy all CDK stacks to dev ─────────────────────────────────────────────
+  deploy:
+    name: Deploy (dev)
+    needs: [build]
+    uses: ./.github/workflows/_cdk-deploy.yml
+    with:
+      environment: dev
+      sha: ${{ github.sha }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+
+  # ── Post-deploy smoke tests ───────────────────────────────────────────────────
+  smoke-test:
+    name: Smoke Test (dev)
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+          aws-region: us-east-1
+      - name: Run smoke tests
+        run: bash scripts/smoke-test.sh dev
