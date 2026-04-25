@@ -202,7 +202,7 @@ export function CollectionsTab() {
     enabled:  !!userId,
   })
 
-  const collections = data?.collections ?? []
+  const collections = data?.items ?? []
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['collections', 'mine', userId] })
 

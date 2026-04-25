@@ -18,7 +18,7 @@ export interface CollectionPiecesResponse {
 
 export const collectionsService = {
   listMy: (authorId: string) =>
-    api.get<{ collections: AuthorCollection[] }>(`/collections?authorId=${authorId}`),
+    api.get<{ items: AuthorCollection[] }>(`/authors/${authorId}/collections`),
 
   create: (body: CollectionBody) =>
     api.post<AuthorCollection>('/collections', body),

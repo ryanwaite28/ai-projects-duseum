@@ -49,12 +49,13 @@ Two separate Stripe accounts — one per environment:
 | dev | `acct_1TMYUPDeejIUwJIS` | `ca_ULF5h4bUlGnwEo3YRUioqoI8hogxwvcb` | `we_1TMiBcDeejIUwJISRTd0wITw` |
 | prod | `acct_1TMYUIRUKQLlSd6o` | `ca_ULF9jsCeRlmkF08gQBXwDqivNgiw38lA` | `we_1TMiH8RUKQLlSd6oP9UMFQ3C` |
 
-**Extra subscribed webhook events** (beyond PROJECT.md spec): The webhook endpoints also receive `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.payment_succeeded`, `subscription_schedule.*`, and `customer.subscription.trial_will_end`. The `subscriptions-webhook-lambda` must handle all of these gracefully:
+**Extra subscribed webhook events** (beyond PROJECT.md spec): The webhook endpoints also receive `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.payment_succeeded`, `subscription_schedule.*`, `customer.subscription.trial_will_end`, and `account.updated`. The `subscriptions-webhook-lambda` must handle all of these gracefully:
 - `customer.subscription.paused` → update Subscription status to `PAUSED` in DynamoDB
 - `customer.subscription.resumed` → update Subscription status back to `ACTIVE`
 - `invoice.payment_succeeded` → acknowledge + skip (no state change needed)
 - All `subscription_schedule.*` → log + skip (not used in v1)
 - `customer.subscription.trial_will_end` → log + skip (no trials in v1)
+- `account.updated` → update Author DynamoDB record with `connectChargesEnabled: account.charges_enabled` (FR-SUB-13); idempotent — safe to apply multiple times
 
 ## IAM Role Naming (project-scoped)
 

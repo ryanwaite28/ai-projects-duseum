@@ -168,6 +168,7 @@ export type UpdateAuthorProfileInput = {
   coverPhotoS3Key?: string | null
   featuredPieceIds?: string[]
   stripeConnectAccountId?: string | null
+  connectChargesEnabled?: boolean | null
   authorSubscriptionPriceId?: string | null
   authorSubscriptionMonthlyUsd?: number | null
 }
@@ -210,6 +211,11 @@ export const updateAuthorProfile = async (
     sets.push('#scaId = :scaId')
     names['#scaId'] = 'stripeConnectAccountId'
     values[':scaId'] = patch.stripeConnectAccountId
+  }
+  if (patch.connectChargesEnabled !== undefined) {
+    sets.push('#cce = :cce')
+    names['#cce'] = 'connectChargesEnabled'
+    values[':cce'] = patch.connectChargesEnabled
   }
   if (patch.authorSubscriptionPriceId !== undefined) {
     sets.push('#aspId = :aspId')

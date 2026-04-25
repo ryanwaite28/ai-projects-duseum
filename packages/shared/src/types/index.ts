@@ -41,7 +41,8 @@ export type AuthorProfile = {
   bio: string
   profilePhotoS3Key: string | null
   coverPhotoS3Key: string | null
-  stripeConnectAccountId: string | null
+  stripeConnectAccountId:  string | null
+  connectChargesEnabled:   boolean | null   // cached from account.updated webhook (FR-SUB-13)
   authorSubscriptionPriceId: string | null  // Stripe Price ID; null if subscriptions disabled
   authorSubscriptionMonthlyUsd: number | null
   featuredPieceIds: string[]  // up to 3 pinned pieces

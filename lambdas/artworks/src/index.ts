@@ -18,6 +18,7 @@
 //   DELETE /collections/{collectionId}              → deleteCollection  (Author only)
 //   POST   /collections/{collectionId}/pieces       → addCollectionPiece
 //   DELETE /collections/{collectionId}/pieces/{id} → removeCollectionPiece
+//   GET    /collections/{collectionId}/pieces       → listCollectionPieces  (owner / JWT)
 //   GET    /authors/{authorId}/collections          → listAuthorCollections (public)
 // =============================================================================
 
@@ -41,7 +42,8 @@ import { updateCollectionRoute }    from './routes/update-collection.js'
 import { deleteCollectionRoute }    from './routes/delete-collection.js'
 import { addCollectionPieceRoute }  from './routes/add-collection-piece.js'
 import { removeCollectionPieceRoute } from './routes/remove-collection-piece.js'
-import { listAuthorCollectionsRoute } from './routes/list-author-collections.js'
+import { listCollectionPiecesRoute }   from './routes/list-collection-pieces.js'
+import { listAuthorCollectionsRoute }  from './routes/list-author-collections.js'
 
 const dispatch = async (
   event: APIGatewayProxyEventV2,
@@ -75,6 +77,7 @@ const dispatch = async (
     // /collections/{collectionId}/pieces[/{artworkId}]
     if (seg2 === 'pieces') {
       const artworkId = seg3
+      if (method === 'GET'    && !artworkId) return listCollectionPiecesRoute(event, context, collectionId!)
       if (method === 'POST'   && !artworkId) return addCollectionPieceRoute(event, context, collectionId!)
       if (method === 'DELETE' && artworkId)  return removeCollectionPieceRoute(event, context, collectionId!, artworkId)
     }
