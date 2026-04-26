@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    fileParallelism: false,
     // Set env vars before any module is imported so the shared docClient
     // and TABLE_NAME initialise correctly (vi.mock factory runs before beforeAll).
     env: {

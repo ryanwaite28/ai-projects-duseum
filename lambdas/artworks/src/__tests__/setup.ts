@@ -4,6 +4,7 @@
 // Section 15.3 — real DynamoDB + S3, no AWS service mocks.
 // =============================================================================
 
+import { generateKeyPairSync } from 'node:crypto'
 import {
   CreateTableCommand,
   DeleteTableCommand,
@@ -57,6 +58,12 @@ beforeAll(async () => {
   process.env.CLOUDFRONT_KEY_PAIR_ID   = 'TESTKEYPAIRID'
   process.env.COGNITO_USER_POOL_ID     = 'us-east-1_testpool'
   process.env.COGNITO_CLIENT_ID        = 'test-client-id'
+
+  // Generate a throwaway RSA-2048 private key so generateSignedUrl works in
+  // tests without hitting Secrets Manager. getCloudfrontPrivateKey checks this
+  // env var first (see packages/shared/src/secrets.ts).
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  process.env.__TEST_CLOUDFRONT_PRIVATE_KEY__ = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string
 
   // Create main table
   try {

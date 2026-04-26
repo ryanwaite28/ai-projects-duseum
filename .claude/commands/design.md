@@ -156,32 +156,54 @@ Reference exact DynamoDB attribute names from the record shapes table above.
 Exact seed data structures and assertion shapes for integration tests.
 Tests use MiniStack (`localhost:4566`) — see `specs/shared/test-infrastructure.md`.
 
-\```typescript
-// Seed event
-const cognitoEvent: PostConfirmationTriggerEvent = {
-  version: '1',
-  triggerSource: 'PostConfirmation_ConfirmSignUp',
-  region: 'us-east-1',
-  userPoolId: 'us-east-1_TEST',
-  userName: 'test-user-001',
-  callerContext: { awsSdkVersion: 'test', clientId: 'test-client' },
-  request: {
-    userAttributes: {
-      sub: 'test-user-001',
-      email: 'test@example.com',
-      email_verified: 'true',
-    },
-  },
-  response: {},
-};
+**Requirements for this section:**
+- Tag every `describe` block with the FR code(s) it covers: `describe('FR-XXX-YY — {description}', ...)`
+- Include fixtures for BOTH the happy path AND every error condition listed in the spec's Business logic
+- Verify actual DynamoDB state with `GetItem`/`QueryCommand` after the handler runs — do not assert only on the HTTP response
+- Seed data must use exact PK/SK formats from `specs/data-model.md` — wrong SK values silently return `null` from GetItem
 
-// Expected DynamoDB record (use GetItem to assert after handler runs)
-const expectedViewer = {
-  PK: 'USER#test-user-001',
-  SK: 'PROFILE#VIEWER',
-  status: 'ACTIVE',
-  email: 'test@example.com',
-};
+\```typescript
+// FR-AUTH-01 — viewer profile created on Cognito confirmation
+describe('FR-AUTH-01 — post-confirmation trigger', () => {
+  it('happy path: creates PROFILE#VIEWER record in DynamoDB', async () => {
+    const event: PostConfirmationTriggerEvent = {
+      version: '1',
+      triggerSource: 'PostConfirmation_ConfirmSignUp',
+      region: 'us-east-1',
+      userPoolId: 'us-east-1_TEST',
+      userName: 'test-user-001',
+      callerContext: { awsSdkVersion: 'test', clientId: 'test-client' },
+      request: {
+        userAttributes: {
+          sub: 'test-user-001',
+          email: 'test@example.com',
+          email_verified: 'true',
+        },
+      },
+      response: {},
+    };
+
+    await handler(event);
+
+    // Verify DynamoDB record — check actual attribute values, not just existence
+    const record = await docClient.send(new GetCommand({
+      TableName: process.env.DYNAMODB_TABLE_NAME!,
+      Key: { PK: 'USER#test-user-001', SK: 'PROFILE#VIEWER' },
+    }));
+    expect(record.Item).toMatchObject({
+      PK: 'USER#test-user-001',
+      SK: 'PROFILE#VIEWER',
+      status: 'ACTIVE',
+      email: 'test@example.com',
+    });
+  });
+
+  it('idempotent: duplicate trigger does not throw', async () => {
+    // Seed pre-existing record to simulate replay
+    await seedItem({ PK: 'USER#test-user-001', SK: 'PROFILE#VIEWER', status: 'ACTIVE' });
+    await expect(handler(event)).resolves.not.toThrow();
+  });
+});
 \```
 
 ### Decisions & Constraints

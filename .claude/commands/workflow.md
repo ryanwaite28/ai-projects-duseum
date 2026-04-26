@@ -84,6 +84,26 @@ For any modified or new `.ts` files: check whether they appear in at least one s
 
 Also check: for each `✅ Implemented` spec, scan its design's `**DynamoDB Record Shapes**` table for attribute names. Cross-reference against the actual repository file. Flag any attribute name in the design that does not appear in the code (indicating design drift).
 
+### 1f. Test coverage audit
+
+```bash
+# Find all test files
+find lambdas packages -path '*/src/__tests__/*.test.ts' | sort
+
+# Extract describe/it strings from test files (rough scan)
+grep -rhoE "(describe|it)\(['\"]([^'\"]+)['\"]" lambdas/ packages/ --include='*.test.ts' | head -80
+```
+
+For each FR that appears in at least one spec file:
+- Search test files for the FR code (`grep -r "FR-XXX-YY" lambdas/ packages/ --include="*.test.ts"`) OR
+- Infer test coverage from `describe`/`it` block names that clearly map to the FR's route or behavior
+
+Categorize:
+- ✅ **Tested**: FR has at least one integration or unit test assertion
+- ⚠️ **Untested**: FR appears in a spec but has no corresponding test block
+
+Surface untested FRs in the dashboard. Do not block the pipeline on them — but surface them prominently as a quality gap requiring attention.
+
 ---
 
 ## Phase 2: Dashboard
@@ -98,7 +118,8 @@ Print the full project status. Always print this before taking any action.
 PROGRESS
   Specs implemented:  {n}/{total}  ({pct}%)
   Designs complete:   {n} 🔒  |  {n} ✅ Approved  |  {n} ⬜ Draft  |  {n} — Missing
-  FR coverage:        {n}/{total} FRs covered
+  FR coverage:        {n}/{total} FRs covered in specs
+  Test coverage:      {n}/{n-in-specs} FRs with at least one test  ({pct}%)
 
 AUDIT ISSUES  (fix these before proceeding)
   ❌ Missing FRs:     {list or "none"}
@@ -106,6 +127,9 @@ AUDIT ISSUES  (fix these before proceeding)
   ⚠️  Malformed specs: {list or "none"}
   ⚠️  Untracked files: {list or "none"}
   ⚠️  Design drift:    {list or "none"}
+
+TEST GAPS  (quality debt — address after audit issues)
+  ⚠️  Untested FRs:   {list or "none — all spec-covered FRs have tests"}
 
 PIPELINE
   ▶ Ready to implement  (design ✅ Approved + prerequisites ✅):
@@ -355,6 +379,17 @@ For each record type in `specs/data-model.md`:
 - Verify the PK/SK format and key attribute names match exactly
 - Report any discrepancy as a data-model drift issue
 
+**Deep test coverage check:**
+For each `✅ Implemented` spec:
+- Read its `**FR coverage**` list
+- For each FR, grep test files for that FR code or for `describe`/`it` strings that clearly exercise it
+- Flag FRs that are implemented but have no test assertions — these are test debt items
+
+**vitest.config.ts audit:**
+For each Lambda with integration tests, verify:
+- `fileParallelism: false` is set — required to prevent DynamoDB table race conditions between parallel test files
+- `DYNAMODB_TABLE_NAME` env var points to the correct test table
+
 **Example reconcile output:**
 ```
 ═══════════════════════════════════════════════════════
@@ -376,9 +411,19 @@ UNTRACKED FILES:
 SPEC/DESIGN MISMATCHES:
   (none)
 
+TEST GAPS:
+  ⚠️ FR-FEAT-04 (weekly feature slot count) — no test assertions found
+  ⚠️ FR-SUB-07 (subscription cancellation) — no test assertions found
+  Action: add integration tests for these FRs
+
+VITEST CONFIG ISSUES:
+  ⚠️ lambdas/artworks/vitest.config.ts — missing fileParallelism: false
+
 RECOMMENDED FIXES:
   1. Update specs/data-model.md — GSI names, idempotency table schema, UserAccount SK
   2. Update specs/shared/types.md — UserAccount interface SK field
+  3. Add fileParallelism: false to lambdas/artworks/vitest.config.ts
+  4. Add integration tests for FR-FEAT-04, FR-SUB-07
 
 Proceed with fixes? (Y / N)
 ═══════════════════════════════════════════════════════
@@ -418,3 +463,5 @@ Still runs prerequisite check before acting.
 - **Never modify `specs/data-model.md` or `specs/shared/types.md` without surfacing the change** to the user — these are shared references used by all designs.
 - **Never invent implementation details** not in the design. If the design is incomplete, update it and get re-approval before continuing.
 - **Reconcile issues take priority** over new design or implementation work. Fix drift before building on top of it.
+- **Never mark `✅ Implemented` without at least one integration test** per FR covered by the spec. TypeScript compilation and type-checking verify correctness of shapes — they do not verify behavior. Tests are required.
+- **Never write a new Lambda vitest.config.ts without `fileParallelism: false`** — parallel test file execution causes DynamoDB table race conditions (one file's `afterAll` deletes tables while another file's tests are still running).

@@ -70,6 +70,13 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      - name: Initialize MiniStack resources
+        run: bash scripts/ministack-init.sh
+        env:
+          AWS_ENDPOINT_URL: http://localhost:4566
+          AWS_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
       - name: Run lambda tests (unit + integration against MiniStack)
         run: npx turbo run test --filter='./lambdas/**'
         env:

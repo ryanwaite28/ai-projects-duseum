@@ -93,7 +93,32 @@ turbo run typecheck
 
 If typecheck fails: fix the type errors, then re-run before continuing.
 
-### 8. Run tests
+### 8. Write tests
+
+**Tests are written here — not discovered later.** Use the design's `**Integration Test Fixtures**` section as the source of truth for seed data and assertion shapes.
+
+For each FR in the spec's `**FR coverage**` list, write at minimum:
+- One **integration test** exercising the happy path (real MiniStack DynamoDB, no mocks)
+- One **integration test** for each error condition listed in the spec's `**Business logic**`
+
+Tag every `describe` block with the FR code(s) it covers:
+
+```typescript
+// lambdas/{name}/src/__tests__/{route}.integration.test.ts
+describe('FR-XXX-YY — {FR description}', () => {
+  it('happy path: {expected outcome}', async () => { ... });
+  it('returns 409 when {conflict condition}', async () => { ... });
+  it('returns 403 when {auth condition}', async () => { ... });
+});
+```
+
+**vitest.config.ts check** — before adding test files to a Lambda that doesn't yet have one, verify its `vitest.config.ts` has `fileParallelism: false`. If missing, add it. Parallel test file execution causes DynamoDB table race conditions (one file's `afterAll` deletes tables mid-test in another file).
+
+**Seed helpers** — use the existing helpers in `src/__tests__/setup.ts`. If a new record type is needed, add a typed seed helper to `setup.ts` before writing the test. Verify the PK/SK format matches `specs/data-model.md` exactly — wrong SK values cause `null` returns from `GetItem` with no error, which silently breaks tests.
+
+Unit tests (mocking `ddb.send`) are optional but encouraged for pure business logic functions in `packages/shared/src/features/` and `packages/shared/src/auth/`.
+
+### 9. Run tests
 
 ```bash
 # For Lambda packages:
@@ -108,7 +133,7 @@ cd infrastructure && npx cdk synth --strict --context env=dev 2>&1
 
 Report pass/fail and test count. If tests fail: fix the issue, then re-run typecheck AND tests before continuing. Do not mark complete on a failing test suite.
 
-### 9. Tick Done when items
+### 10. Tick Done when items
 
 For each `- [ ]` item in the spec's **Done when** checklist, verify it is satisfied (code exists, test passes, etc.). Edit the spec file — change `- [ ]` → `- [x]` for each completed criterion.
 
@@ -118,7 +143,7 @@ For infrastructure Done when items requiring CLI verification (e.g., "all 5 SSM 
     aws ssm get-parameters-by-path --path /duseum/dev/stacks/storage/ --profile rmw-llc
 ```
 
-### 10. Update spec Status
+### 11. Update spec Status
 
 Only after ALL `Done when` boxes are checked:
 
@@ -126,7 +151,7 @@ Change `**Status**: ⬜ Pending` → `**Status**: ✅ Implemented`
 
 Also update the design file: change `**Status**: ✅ Approved` → `**Status**: 🔒 Implemented`.
 
-### 11. Summary
+### 12. Summary
 
 ```
 ## Implementation Complete — {spec name}
@@ -136,6 +161,8 @@ Files created/modified: {list}
 Done when: {n}/{n} criteria satisfied
 TypeScript: PASS
 Tests: PASS ({n} tests)
+  FR-XXX-YY: {n} tests (happy path + {n} error paths)
+  FR-XXX-ZZ: {n} tests (happy path + {n} error paths)
 
 Next: run /spec-status to see overall project progress.
 ```
@@ -147,7 +174,10 @@ Next: run /spec-status to see overall project progress.
 - **Design gate is non-negotiable** — no `✅ Approved` design = no implementation
 - **Prerequisite spec gate is non-negotiable** — prerequisite ⬜ Pending = hard stop
 - **TypeScript compilation must pass before tests** — do not run vitest on type-broken code
+- **Tests must be written (not just run) as part of implementation** — use the design's Integration Test Fixtures section. At minimum: one integration test per FR (happy path) plus one per error condition in Business logic.
 - **Never mark `✅ Implemented` until ALL `Done when` boxes are checked**
+- **Never mark `✅ Implemented` without at least one passing integration test per FR** — typecheck alone is not enough
 - **Do not implement beyond what the design describes** — no extra abstractions, no scope creep
 - **If implementation reveals the design needs a change** (new attribute, different signature): stop, update the design, ask for re-approval, then continue
 - **Infrastructure `Done when` items that require CLI verification** are human-verifiable — note them but do not block completion on them
+- **Every vitest.config.ts for a Lambda must have `fileParallelism: false`** — add it if missing before writing new test files

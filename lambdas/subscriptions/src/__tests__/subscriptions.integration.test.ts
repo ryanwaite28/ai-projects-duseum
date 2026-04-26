@@ -28,6 +28,11 @@ vi.mock('@duseum/shared', async (importOriginal) => {
   return {
     ...actual,
     getStripeClient: vi.fn(),
+    // getOrCreateStripeCustomer must be mocked at this level — mocking
+    // createStripeCustomer alone doesn't work because the real
+    // getOrCreateStripeCustomer calls createStripeCustomer via an internal
+    // package-scope binding that bypasses the module mock boundary.
+    getOrCreateStripeCustomer: vi.fn().mockResolvedValue('cus_test_mock_001'),
     createCheckoutSession: vi.fn().mockResolvedValue({
       url: 'https://checkout.stripe.com/test-session-url',
       id:  'cs_test_123',

@@ -48,6 +48,10 @@ export const getStripeWebhookSecret = async (): Promise<string> => {
 
 let _cloudfrontPrivateKey: string | undefined
 export const getCloudfrontPrivateKey = async (): Promise<string> => {
+  // Allow integration tests to inject a key without hitting Secrets Manager
+  if (process.env.__TEST_CLOUDFRONT_PRIVATE_KEY__) {
+    return process.env.__TEST_CLOUDFRONT_PRIVATE_KEY__
+  }
   if (_cloudfrontPrivateKey) return _cloudfrontPrivateKey
   _cloudfrontPrivateKey = await get(`duseum/${ENV}/cloudfront/private-key`)
   return _cloudfrontPrivateKey

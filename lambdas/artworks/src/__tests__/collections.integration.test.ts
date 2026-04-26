@@ -6,6 +6,7 @@
 // Tests use ENVIRONMENT=local JWT stub — no real Cognito verification.
 // =============================================================================
 
+import { randomUUID } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
 import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import { handler } from '../index.js'
@@ -22,6 +23,15 @@ import {
 const AUTHOR_ID    = 'col-author-001'
 const SUBSCRIBER   = 'col-subscriber-001'
 const FREE_VIEWER  = 'col-free-viewer-001'
+
+// UUID artwork IDs — routes validate artworkId as UUID
+const ART_PUB_01  = randomUUID()
+const ART_PRIV_01 = randomUUID()
+const ART_PUB_02  = randomUUID()
+const ART_PRIV_02 = randomUUID()
+const ART_DEL_01  = randomUUID()
+const ART_RM_01   = randomUUID()
+const ART_RM_02   = randomUUID()
 
 // ── Seed helpers ──────────────────────────────────────────────────────────────
 
@@ -130,8 +140,8 @@ describe('Collection lifecycle: add pieces → GET access-tier filtering', () =>
   it('GET returns pieces filtered by viewer access tier — visible < total when PRIVATE pieces present', async () => {
     await Promise.all([
       seedAuthorProfile(),
-      seedArtwork('col-art-pub-01', 'PUBLIC'),
-      seedArtwork('col-art-priv-01', 'PRIVATE'),
+      seedArtwork(ART_PUB_01, 'PUBLIC'),
+      seedArtwork(ART_PRIV_01, 'PRIVATE'),
     ])
 
     // Create collection
@@ -146,7 +156,7 @@ describe('Collection lifecycle: add pieces → GET access-tier filtering', () =>
     const addPub = await callHandler(makeEvent('POST', `/collections/${collectionId}/pieces`, {
       userId: AUTHOR_ID,
       pathParameters: { collectionId },
-      body:   { artworkId: 'col-art-pub-01', order: 1 },
+      body:   { artworkId: ART_PUB_01, order: 1 },
     }))
     expect(addPub.statusCode).toBe(201)
 
@@ -154,7 +164,7 @@ describe('Collection lifecycle: add pieces → GET access-tier filtering', () =>
     const addPriv = await callHandler(makeEvent('POST', `/collections/${collectionId}/pieces`, {
       userId: AUTHOR_ID,
       pathParameters: { collectionId },
-      body:   { artworkId: 'col-art-priv-01', order: 2 },
+      body:   { artworkId: ART_PRIV_01, order: 2 },
     }))
     expect(addPriv.statusCode).toBe(201)
 
@@ -168,7 +178,7 @@ describe('Collection lifecycle: add pieces → GET access-tier filtering', () =>
     expect(freeBody.totalPieceCount).toBe(2)
     expect(freeBody.visiblePieceCount).toBe(1)
     expect(freeBody.pieces).toHaveLength(1)
-    expect(freeBody.pieces[0].artworkId).toBe('col-art-pub-01')
+    expect(freeBody.pieces[0].artworkId).toBe(ART_PUB_01)
 
     // GET as author subscriber — should see both pieces
     await seedAuthorSubscription(SUBSCRIBER)
@@ -185,8 +195,8 @@ describe('Collection lifecycle: add pieces → GET access-tier filtering', () =>
   it('GET as owner shows all pieces regardless of visibility', async () => {
     await Promise.all([
       seedAuthorProfile(),
-      seedArtwork('col-art-pub-02', 'PUBLIC'),
-      seedArtwork('col-art-priv-02', 'PRIVATE'),
+      seedArtwork(ART_PUB_02, 'PUBLIC'),
+      seedArtwork(ART_PRIV_02, 'PRIVATE'),
     ])
 
     const createRes = await callHandler(makeEvent('POST', '/collections', {
@@ -199,12 +209,12 @@ describe('Collection lifecycle: add pieces → GET access-tier filtering', () =>
       callHandler(makeEvent('POST', `/collections/${collectionId}/pieces`, {
         userId: AUTHOR_ID,
         pathParameters: { collectionId },
-        body:   { artworkId: 'col-art-pub-02', order: 1 },
+        body:   { artworkId: ART_PUB_02, order: 1 },
       })),
       callHandler(makeEvent('POST', `/collections/${collectionId}/pieces`, {
         userId: AUTHOR_ID,
         pathParameters: { collectionId },
-        body:   { artworkId: 'col-art-priv-02', order: 2 },
+        body:   { artworkId: ART_PRIV_02, order: 2 },
       })),
     ])
 
@@ -279,7 +289,7 @@ describe('PRIVATE collection access control', () => {
 
 describe('DELETE /collections/{collectionId}', () => {
   it('deletes collection; subsequent GET returns 404; art pieces unaffected', async () => {
-    await Promise.all([seedAuthorProfile(), seedArtwork('col-art-del-01', 'PUBLIC')])
+    await Promise.all([seedAuthorProfile(), seedArtwork(ART_DEL_01, 'PUBLIC')])
 
     const createRes = await callHandler(makeEvent('POST', '/collections', {
       userId: AUTHOR_ID,
@@ -290,7 +300,7 @@ describe('DELETE /collections/{collectionId}', () => {
     await callHandler(makeEvent('POST', `/collections/${collectionId}/pieces`, {
       userId: AUTHOR_ID,
       pathParameters: { collectionId },
-      body:   { artworkId: 'col-art-del-01', order: 1 },
+      body:   { artworkId: ART_DEL_01, order: 1 },
     }))
 
     const delRes = await callHandler(makeEvent('DELETE', `/collections/${collectionId}`, {
@@ -310,9 +320,9 @@ describe('DELETE /collections/{collectionId}', () => {
     // Art piece still exists in DynamoDB
     const pieceItem = await docClient.send(new GetCommand({
       TableName: TABLE,
-      Key: { PK: 'ARTWORK#col-art-del-01', SK: 'METADATA' },
+      Key: { PK: `ARTWORK#${ART_DEL_01}`, SK: 'METADATA' },
     }))
-    expect(pieceItem.Item?.artworkId).toBe('col-art-del-01')
+    expect(pieceItem.Item?.artworkId).toBe(ART_DEL_01)
   })
 })
 
@@ -324,8 +334,8 @@ describe('DELETE /collections/{collectionId}/pieces/{artworkId}', () => {
   it('removes a piece from the collection; subsequent GET omits it', async () => {
     await Promise.all([
       seedAuthorProfile(),
-      seedArtwork('col-art-rm-01', 'PUBLIC'),
-      seedArtwork('col-art-rm-02', 'PUBLIC'),
+      seedArtwork(ART_RM_01, 'PUBLIC'),
+      seedArtwork(ART_RM_02, 'PUBLIC'),
     ])
 
     const createRes = await callHandler(makeEvent('POST', '/collections', {
@@ -338,18 +348,18 @@ describe('DELETE /collections/{collectionId}/pieces/{artworkId}', () => {
       callHandler(makeEvent('POST', `/collections/${collectionId}/pieces`, {
         userId: AUTHOR_ID,
         pathParameters: { collectionId },
-        body:   { artworkId: 'col-art-rm-01', order: 1 },
+        body:   { artworkId: ART_RM_01, order: 1 },
       })),
       callHandler(makeEvent('POST', `/collections/${collectionId}/pieces`, {
         userId: AUTHOR_ID,
         pathParameters: { collectionId },
-        body:   { artworkId: 'col-art-rm-02', order: 2 },
+        body:   { artworkId: ART_RM_02, order: 2 },
       })),
     ])
 
-    const rmRes = await callHandler(makeEvent('DELETE', `/collections/${collectionId}/pieces/col-art-rm-01`, {
+    const rmRes = await callHandler(makeEvent('DELETE', `/collections/${collectionId}/pieces/${ART_RM_01}`, {
       userId: AUTHOR_ID,
-      pathParameters: { collectionId, artworkId: 'col-art-rm-01' },
+      pathParameters: { collectionId, artworkId: ART_RM_01 },
     }))
     expect(rmRes.statusCode).toBe(200)
 
@@ -360,7 +370,7 @@ describe('DELETE /collections/{collectionId}/pieces/{artworkId}', () => {
     expect(getRes.statusCode).toBe(200)
     const getBody = JSON.parse(getRes.body)
     expect(getBody.totalPieceCount).toBe(1)
-    expect(getBody.pieces[0].artworkId).toBe('col-art-rm-02')
+    expect(getBody.pieces[0].artworkId).toBe(ART_RM_02)
   })
 
   it('returns 404 when piece is not in the collection', async () => {
@@ -372,9 +382,9 @@ describe('DELETE /collections/{collectionId}/pieces/{artworkId}', () => {
     }))
     const { collectionId } = JSON.parse(createRes.body) as { collectionId: string }
 
-    const res = await callHandler(makeEvent('DELETE', `/collections/${collectionId}/pieces/nonexistent-art`, {
+    const res = await callHandler(makeEvent('DELETE', `/collections/${collectionId}/pieces/${randomUUID()}`, {
       userId: AUTHOR_ID,
-      pathParameters: { collectionId, artworkId: 'nonexistent-art' },
+      pathParameters: { collectionId, artworkId: randomUUID() },
     }))
     expect(res.statusCode).toBe(404)
   })

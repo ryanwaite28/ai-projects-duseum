@@ -141,26 +141,18 @@ export const listArtworks = async (
 
       // Locked item — return only safe fields (no s3Key, no thumbnailUrl)
       return {
-        artworkId:  piece.artworkId,
-        authorId:   piece.authorId,
-        title:      piece.title,
-        category:   piece.category,
-        createdAt:  piece.createdAt,
-        // Carry over fields required by the ArtPiece type but mark as locked
-        description:     '',
-        tags:            [],
-        visibility:      piece.visibility,
-        status:          piece.status,
-        s3Key:           '',
-        mimeType:        '',
-        fileSizeBytes:   0,
-        viewCount:       piece.viewCount,
-        commentsEnabled: false,
-        notifiedCount:   0,
+        artworkId:       piece.artworkId,
+        authorId:        piece.authorId,
+        title:           piece.title,
+        category:        piece.category,
+        createdAt:       piece.createdAt,
         updatedAt:       piece.updatedAt,
         publishedAt:     piece.publishedAt,
+        visibility:      piece.visibility,
+        status:          piece.status,
+        viewCount:       piece.viewCount,
         accessTier:      'REQUIRES_PLATFORM_SUB',
-      }
+      } as unknown as AnnotatedItem
     })
   )
 

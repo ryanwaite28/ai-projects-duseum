@@ -16,6 +16,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    fileParallelism: false,      // REQUIRED — see "Parallel file execution" section below
     environment: 'node',
     globals: true,
     setupFiles: ['./src/__tests__/setup.ts'],
@@ -24,6 +25,16 @@ export default defineConfig({
   },
 });
 ```
+
+### Parallel file execution — always disabled
+
+**`fileParallelism: false` is required in every Lambda's `vitest.config.ts`.**
+
+By default, Vitest runs multiple test files in parallel (worker threads). For integration tests that share a single MiniStack DynamoDB table, this causes a fatal race condition: one file's `afterAll` teardown deletes the table while another file's tests are still running, producing `ResourceNotFoundException: Table not found` errors in the middle of the suite.
+
+`fileParallelism: false` forces test files to run sequentially. Individual `it` blocks within a file still run in the default order. The performance cost is acceptable — integration tests are already I/O-bound on MiniStack.
+
+If you create a new Lambda with integration tests, add this to its `vitest.config.ts` before writing any test files.
 
 ---
 
@@ -360,6 +371,7 @@ Set these in `vitest.config.ts` or `.env.test`:
 // vitest.config.ts
 export default defineConfig({
   test: {
+    fileParallelism: false,      // always required
     env: {
       NODE_ENV: 'test',
       IS_LOCAL: 'true',
@@ -380,3 +392,69 @@ export default defineConfig({
   },
 });
 ```
+
+---
+
+## FR Tagging Convention
+
+Tag every `describe` block in integration test files with the FR code(s) it exercises. This enables the workflow audit (Phase 1f) to map tests back to FRs automatically.
+
+```typescript
+describe('FR-FEAT-01 — author can book a weekly feature slot', () => {
+  it('happy path: returns 201 and creates confirmed booking', async () => { ... });
+  it('returns 409 when slot is already booked for that week', async () => { ... });
+  it('returns 400 when booking is outside the 8-week advance window', async () => { ... });
+});
+
+describe('FR-FEAT-02 — author cannot book more than once per 3 months', () => {
+  it('returns 409 when author has a booking within the last 3 months', async () => { ... });
+});
+```
+
+If a single test covers multiple FRs, list all of them: `describe('FR-NOTIF-02, FR-NOTIF-09 — fan-out via SQS', () => {`.
+
+---
+
+## Known Gotchas
+
+### Wrong SK in seed helpers silently breaks tests
+
+`DynamoDB.GetItem` returns `{ Item: undefined }` — not an error — when the item does not exist. If a seed helper writes a record with the wrong SK, the handler's repository call returns `null`, and the test fails with a confusing assertion error rather than a clear "record not found" message.
+
+**Verified PK/SK formats** (cross-check against `specs/data-model.md` when in doubt):
+
+| Record type | PK | SK |
+|---|---|---|
+| User account (email) | `USER#{userId}` | `PROFILE` |
+| Author profile | `USER#{userId}` | `PROFILE#AUTHOR` |
+| Viewer profile | `USER#{userId}` | `PROFILE#VIEWER` |
+| Art piece | `ARTWORK#{artworkId}` | `ARTWORK` |
+| Weekly feature booking (by week) | `FEATURE#WEEK#{isoWeek}` | `AUTHOR#{authorId}` |
+| Weekly feature booking (by author) | `AUTHOR#{authorId}` | `FEATURE#WEEK#{isoWeek}` |
+| Booking pointer | `BOOKING#{bookingId}` | `METADATA` |
+| Follow | `USER#{viewerId}` | `FOLLOW#AUTHOR#{authorId}` |
+| Author subscription | `USER#{userId}` | `SUB#AUTHOR#{authorId}` |
+| Notification preference | `USER#{viewerId}` | `NOTIF_PREF#AUTHOR#{authorId}` |
+
+### GSI double-write and double-count
+
+Several entities use a double-write pattern: a "forward" item (e.g., `PK=FEATURE#WEEK#{isoWeek}`) and a "reverse" item (e.g., `PK=AUTHOR#{authorId}`) are both written to the same table. Both items carry the same GSI attributes (`featureStatus`, `isoWeek`), so the GSI indexes both. A `QueryCommand` on the GSI returns both items — double the expected count.
+
+**Fix**: add a `FilterExpression` to restrict by PK prefix:
+
+```typescript
+// Count only forward (week-keyed) booking items — not reverse (author-keyed) copies
+FilterExpression: 'begins_with(PK, :pkPrefix)',
+ExpressionAttributeValues: {
+  ':pkPrefix': 'FEATURE#WEEK#',
+  // ... other values
+},
+```
+
+Do NOT remove attributes from the reverse item to fix counting — other queries (e.g., `getRecentBookingsByAuthor`) read those attributes from the reverse item. Fix the query, not the data.
+
+### Reverse lookup items must carry full data
+
+When seeding booking records for tests, both the forward and reverse items must carry the complete attribute set (including `isoWeek`, `featureStatus`, `weekStartDate`, `weekEndDate`). The `getRecentBookingsByAuthor` function reads these attributes directly from the reverse item — if they are absent, runtime code throws `TypeError: Cannot read properties of undefined`.
+
+See `lambdas/features/src/__tests__/setup.ts` → `seedConfirmedBooking` for the canonical seed helper pattern.

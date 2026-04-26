@@ -49,8 +49,14 @@ const PUBLIC_PATHS: ReadonlySet<string> = new Set([
   'GET /health',
   'GET /artworks',
   'GET /artworks/{artworkId}',
+  'GET /artworks/{artworkId}/comments',
+  'GET /authors',
   'GET /authors/{authorId}',
   'GET /authors/{authorId}/artworks',
+  'GET /authors/{authorId}/collections',
+  'GET /collections/{collectionId}',
+  'GET /users/{userId}/profile',
+  'GET /notifications/unsubscribe',
   'POST /webhooks/stripe',
   // features-lambda public routes (no JWT required)
   'GET /features/daily',
@@ -96,6 +102,33 @@ export const cognitoAuthMiddleware = (): MiddlewareObj<
 
     if (isPublicPath(event)) {
       context.userGroups = []
+
+      // Optional auth: if a Bearer token is present, try to extract the caller
+      // identity so routes can apply auth-aware logic (subscriber access, owner
+      // view) without requiring authentication. Failures are silently ignored.
+      const optHeader = event.headers?.['authorization'] ?? event.headers?.['Authorization']
+      if (optHeader?.startsWith('Bearer ')) {
+        const optToken = optHeader.slice(7)
+        try {
+          if (process.env.ENVIRONMENT === 'local') {
+            const payloadB64 = optToken.split('.')[1]
+            if (payloadB64) {
+              const payload = JSON.parse(
+                Buffer.from(payloadB64, 'base64url').toString('utf8')
+              ) as { sub?: string; 'cognito:groups'?: string[] }
+              if (payload.sub) {
+                context.userId = payload.sub
+                context.userGroups = payload['cognito:groups'] ?? []
+              }
+            }
+          } else {
+            const payload = await getVerifier().verify(optToken)
+            context.userId = payload.sub
+            context.userGroups = (payload['cognito:groups'] as string[] | undefined) ?? []
+          }
+        } catch { /* invalid token on public path — treat as unauthenticated */ }
+      }
+
       return
     }
 

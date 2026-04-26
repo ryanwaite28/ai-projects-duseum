@@ -5,6 +5,7 @@
 // Prerequisites: MiniStack running at localhost:4566
 // =============================================================================
 
+import { randomUUID } from 'node:crypto'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { ReceiveMessageCommand } from '@aws-sdk/client-sqs'
 import { describe, expect, it } from 'vitest'
@@ -105,7 +106,7 @@ describe('POST /artworks', () => {
     await seedViewerProfile()
     const event = makeEvent('POST', '/artworks', {
       userId: VIEWER_ID,
-      body:   validBody('any-key'),
+      body:   validBody(randomUUID()),
     })
     const res = await handler(event as never, makeCtx())
     expect(res.statusCode).toBe(403)
@@ -114,7 +115,7 @@ describe('POST /artworks', () => {
   it('returns 403 when the upload intent belongs to a different user', async () => {
     await seedAuthorProfile()
     await seedAuthorProfile(OTHER_AUTHOR_ID)
-    const intentId = 'intent-other-001'
+    const intentId = randomUUID()
     // Intent was created by OTHER_AUTHOR_ID
     await seedUploadIntent(intentId, OTHER_AUTHOR_ID)
     await seedS3Object(intentId)
@@ -130,7 +131,7 @@ describe('POST /artworks', () => {
     await seedAuthorProfile()
     const event = makeEvent('POST', '/artworks', {
       userId: AUTHOR_ID,
-      body:   validBody('nonexistent-key'),
+      body:   validBody(randomUUID()),
     })
     const res = await handler(event as never, makeCtx())
     expect(res.statusCode).toBe(400)
@@ -138,7 +139,7 @@ describe('POST /artworks', () => {
 
   it('returns 400 when S3 object does not exist (intent present, upload not done)', async () => {
     await seedAuthorProfile()
-    const intentId = 'intent-no-s3-001'
+    const intentId = randomUUID()
     await seedUploadIntent(intentId)
     // Do NOT upload to S3
     const event = makeEvent('POST', '/artworks', {
@@ -153,7 +154,7 @@ describe('POST /artworks', () => {
 
   it('returns 400 when the UploadIntent is already CONSUMED', async () => {
     await seedAuthorProfile()
-    const intentId = 'intent-consumed-001'
+    const intentId = randomUUID()
     await seedItem({
       PK: `UPLOAD#${intentId}`,
       SK: 'METADATA',
@@ -177,7 +178,7 @@ describe('POST /artworks', () => {
 
   it('returns 201 and creates ArtPiece with status=PUBLIC for PUBLIC visibility', async () => {
     await seedAuthorProfile()
-    const intentId = 'intent-public-001'
+    const intentId = randomUUID()
     await seedUploadIntent(intentId)
     await seedS3Object(intentId)
 
@@ -208,7 +209,7 @@ describe('POST /artworks', () => {
 
   it('enqueues NEW_PIECE_PUBLISHED SQS message for PUBLIC piece', async () => {
     await seedAuthorProfile()
-    const intentId = 'intent-sqs-public-001'
+    const intentId = randomUUID()
     await seedUploadIntent(intentId)
     await seedS3Object(intentId)
 
@@ -239,7 +240,7 @@ describe('POST /artworks', () => {
 
   it('enqueues NEW_PIECE_PUBLISHED SQS message for PRIVATE piece', async () => {
     await seedAuthorProfile()
-    const intentId = 'intent-sqs-private-001'
+    const intentId = randomUUID()
     await seedUploadIntent(intentId)
     await seedS3Object(intentId)
 
@@ -260,7 +261,7 @@ describe('POST /artworks', () => {
 
   it('does NOT enqueue SQS message for DRAFT piece', async () => {
     await seedAuthorProfile()
-    const intentId = 'intent-draft-001'
+    const intentId = randomUUID()
     await seedUploadIntent(intentId)
     await seedS3Object(intentId)
 
@@ -288,7 +289,7 @@ describe('POST /artworks', () => {
 
   it('marks the UploadIntent as CONSUMED after successful creation', async () => {
     await seedAuthorProfile()
-    const intentId = 'intent-consume-check-001'
+    const intentId = randomUUID()
     await seedUploadIntent(intentId)
     await seedS3Object(intentId)
 
@@ -307,7 +308,7 @@ describe('POST /artworks', () => {
 
   it('HTTP 201 response is returned synchronously before SQS processing completes', async () => {
     await seedAuthorProfile()
-    const intentId = 'intent-sync-001'
+    const intentId = randomUUID()
     await seedUploadIntent(intentId)
     await seedS3Object(intentId)
 

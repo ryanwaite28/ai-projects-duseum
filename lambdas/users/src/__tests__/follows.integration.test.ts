@@ -4,31 +4,13 @@
 // unsubscribe — FR-VIEW-06/06a/09/10, FR-NOTIF-08, §15.3
 //
 // Prerequisites: MiniStack running at localhost:4566
-// Uses its own table `duseum-test-follows` to avoid conflicting with the
-// existing users integration tests.
+// Shares `duseum-test-users` table (and lifecycle) from setup.ts.
 // =============================================================================
 
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
-import {
-  CreateTableCommand,
-  DeleteTableCommand,
-  DynamoDBClient,
-  ResourceInUseException,
-} from '@aws-sdk/client-dynamodb'
-import { DynamoDBDocumentClient, PutCommand, ScanCommand, DeleteCommand, GetCommand } from '@aws-sdk/lib-dynamodb'
+import { describe, it, expect, vi } from 'vitest'
+import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import { handler } from '../index.js'
-
-// ── Test-scoped table ─────────────────────────────────────────────────────────
-
-const ENDPOINT = 'http://localhost:4566'
-const REGION   = 'us-east-1'
-const TABLE    = 'duseum-test-follows'
-const creds    = { accessKeyId: 'test', secretAccessKey: 'test' }
-
-const dynamo    = new DynamoDBClient({ region: REGION, endpoint: ENDPOINT, credentials: creds })
-const docClient = DynamoDBDocumentClient.from(dynamo, {
-  marshallOptions: { removeUndefinedValues: true },
-})
+import { TABLE, docClient, makeEvent, makeCtx, seedItem } from './setup.js'
 
 // Stub the unsubscribe secret so token operations work without Secrets Manager
 vi.mock('@duseum/shared', async (importOriginal) => {
@@ -36,70 +18,6 @@ vi.mock('@duseum/shared', async (importOriginal) => {
   return {
     ...original,
     getUnsubscribeSecret: vi.fn().mockResolvedValue('follows-test-hmac-secret'),
-  }
-})
-
-beforeAll(async () => {
-  process.env.ENVIRONMENT            = 'local'
-  process.env.AWS_REGION             = REGION
-  process.env.AWS_ENDPOINT_URL       = ENDPOINT
-  process.env.DYNAMODB_TABLE_NAME    = TABLE
-  process.env.CONFIG_TABLE_NAME      = 'unused'
-  process.env.IDEMPOTENCY_TABLE_NAME = 'unused'
-  process.env.S3_MEDIA_BUCKET_NAME   = 'unused'
-  process.env.CLOUDFRONT_MEDIA_DOMAIN = 'media.test.duseum.com'
-  process.env.CLOUDFRONT_KEY_PAIR_ID  = 'TESTKEYPAIRID'
-  process.env.COGNITO_USER_POOL_ID   = 'us-east-1_testpool'
-  process.env.COGNITO_CLIENT_ID      = 'test-client-id'
-
-  try {
-    await dynamo.send(new CreateTableCommand({
-      TableName: TABLE,
-      KeySchema: [
-        { AttributeName: 'PK', KeyType: 'HASH' },
-        { AttributeName: 'SK', KeyType: 'RANGE' },
-      ],
-      AttributeDefinitions: [
-        { AttributeName: 'PK',          AttributeType: 'S' },
-        { AttributeName: 'SK',          AttributeType: 'S' },
-        { AttributeName: 'authorId',    AttributeType: 'S' },
-        { AttributeName: 'followedAt',  AttributeType: 'S' },
-        { AttributeName: 'profileType', AttributeType: 'S' },
-        { AttributeName: 'createdAt',   AttributeType: 'S' },
-      ],
-      GlobalSecondaryIndexes: [
-        {
-          IndexName: 'GSI-FollowersByAuthor',
-          KeySchema: [
-            { AttributeName: 'authorId',   KeyType: 'HASH' },
-            { AttributeName: 'followedAt', KeyType: 'RANGE' },
-          ],
-          Projection: { ProjectionType: 'ALL' },
-        },
-        {
-          IndexName: 'GSI-AuthorDirectory',
-          KeySchema: [
-            { AttributeName: 'profileType', KeyType: 'HASH' },
-            { AttributeName: 'createdAt',   KeyType: 'RANGE' },
-          ],
-          Projection: { ProjectionType: 'ALL' },
-        },
-      ],
-      BillingMode: 'PAY_PER_REQUEST',
-    }))
-  } catch (err) {
-    if (!(err instanceof ResourceInUseException)) throw err
-  }
-})
-
-afterAll(async () => {
-  await dynamo.send(new DeleteTableCommand({ TableName: TABLE })).catch(() => {})
-})
-
-afterEach(async () => {
-  const scan = await docClient.send(new ScanCommand({ TableName: TABLE, ProjectionExpression: 'PK, SK' }))
-  for (const item of scan.Items ?? []) {
-    await docClient.send(new DeleteCommand({ TableName: TABLE, Key: { PK: item['PK'], SK: item['SK'] } }))
   }
 })
 
@@ -111,41 +29,6 @@ const callHandler = async (event: unknown): Promise<HandlerResult> => {
   const result = await handler(event as never, makeCtx())
   return result as HandlerResult
 }
-
-const makeToken = (sub: string) => {
-  const h = Buffer.from(JSON.stringify({ alg: 'RS256' })).toString('base64url')
-  const p = Buffer.from(JSON.stringify({ sub })).toString('base64url')
-  return `${h}.${p}.fakesig`
-}
-
-const makeEvent = (
-  method: string,
-  path: string,
-  opts: {
-    userId?: string
-    body?: unknown
-    pathParameters?: Record<string, string>
-    queryStringParameters?: Record<string, string>
-  } = {}
-) => ({
-  headers:               opts.userId ? { authorization: `Bearer ${makeToken(opts.userId)}` } : {},
-  body:                  opts.body ? JSON.stringify(opts.body) : undefined,
-  pathParameters:        opts.pathParameters ?? {},
-  queryStringParameters: opts.queryStringParameters ?? {},
-  requestContext: {
-    http: { method, path },
-    requestId: `test-${Date.now()}`,
-  },
-})
-
-const makeCtx = () => ({
-  awsRequestId:             'test-aws-req-id',
-  functionName:             'users-lambda',
-  getRemainingTimeInMillis: () => 30_000,
-}) as never
-
-const seedItem = (item: Record<string, unknown>) =>
-  docClient.send(new PutCommand({ TableName: TABLE, Item: item }))
 
 const seedViewer = (userId: string) =>
   seedItem({
@@ -164,12 +47,12 @@ const seedAuthor = (authorId: string) =>
   seedItem({
     PK: `USER#${authorId}`,
     SK: 'PROFILE#AUTHOR',
-    userId:       authorId,
-    profileType:  'AUTHOR',
-    status:       'ACTIVE',
-    displayName:  `Author ${authorId}`,
-    createdAt:    '2025-01-01T00:00:00.000Z',
-    followerCount: 0,
+    userId:         authorId,
+    profileType:    'AUTHOR',
+    status:         'ACTIVE',
+    displayName:    `Author ${authorId}`,
+    createdAt:      '2025-01-01T00:00:00.000Z',
+    followerCount:  0,
     subscriberCount: 0,
   })
 
@@ -419,3 +302,4 @@ describe('GET /notifications/unsubscribe', () => {
     expect(res.statusCode).toBe(400)
   })
 })
+
