@@ -123,10 +123,18 @@ export const makeSqsEvent = (rawBody: string, stripeSignature = 'sig_test') => (
   }],
 })
 
-/** Build a serialised Stripe event payload string. */
+/** Build a serialised Stripe event payload string.
+ *  Pass connectAccountId for Stripe Connect events (e.g. account.updated). */
 export const makeStripeEvent = (
   id: string,
   type: string,
-  dataObject: Record<string, unknown>
+  dataObject: Record<string, unknown>,
+  connectAccountId?: string
 ): string =>
-  JSON.stringify({ id, type, data: { object: dataObject }, livemode: false })
+  JSON.stringify({
+    id,
+    type,
+    data: { object: dataObject },
+    livemode: false,
+    ...(connectAccountId ? { account: connectAccountId } : {}),
+  })

@@ -68,14 +68,19 @@ export const countActiveBookingsForWeek = async (
   client: DynamoDBDocumentClient,
   isoWeek: string
 ): Promise<number> => {
+  // FilterExpression restricts to primary booking items (PK=FEATURE#WEEK#…).
+  // Both the forward item and the AUTHOR# reverse-lookup item carry featureStatus
+  // + isoWeek, so without this filter the GSI would double-count each booking.
   const result = await client.send(
     new QueryCommand({
       TableName: TABLE_NAME,
       IndexName: 'GSI-WeeklyFeatureByStatus',
       KeyConditionExpression: 'featureStatus = :status AND isoWeek = :week',
+      FilterExpression:       'begins_with(PK, :pkPrefix)',
       ExpressionAttributeValues: {
-        ':status': 'CONFIRMED',
-        ':week':   isoWeek,
+        ':status':   'CONFIRMED',
+        ':week':     isoWeek,
+        ':pkPrefix': 'FEATURE#WEEK#',
       },
       Select: 'COUNT',
     })

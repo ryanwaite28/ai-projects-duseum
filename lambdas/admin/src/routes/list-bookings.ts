@@ -58,16 +58,19 @@ export const listBookings = async (
   let lastEvaluatedKey: Record<string, unknown> | undefined
 
   if (status) {
-    // GSI-WeeklyFeatureByStatus — can filter to exact week or all weeks
+    // GSI-WeeklyFeatureByStatus — can filter to exact week or all weeks.
+    // FilterExpression excludes the reverse-lookup items (PK=AUTHOR#...) that
+    // also carry featureStatus/isoWeek but are not the canonical booking records.
     const result = await docClient.send(new QueryCommand({
       TableName: TABLE,
       IndexName: 'GSI-WeeklyFeatureByStatus',
       KeyConditionExpression: week
         ? 'featureStatus = :status AND isoWeek = :week'
         : 'featureStatus = :status',
+      FilterExpression: 'begins_with(PK, :pkPrefix)',
       ExpressionAttributeValues: week
-        ? { ':status': status, ':week': week }
-        : { ':status': status },
+        ? { ':status': status, ':week': week, ':pkPrefix': 'FEATURE#WEEK#' }
+        : { ':status': status, ':pkPrefix': 'FEATURE#WEEK#' },
       Limit: limit,
       ExclusiveStartKey: exclusiveStartKey,
     }))

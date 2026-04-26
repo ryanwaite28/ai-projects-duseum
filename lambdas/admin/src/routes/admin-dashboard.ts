@@ -46,19 +46,21 @@ export const adminDashboard = async (
     getConfigNumber(docClient, 'NEW_SIGNUPS_30D', -1),
     getDlqDepth(process.env.STRIPE_WEBHOOK_DLQ_URL),
     getDlqDepth(process.env.NOTIFICATION_DLQ_URL),
-    // CONFIRMED bookings from current week onward
+    // CONFIRMED bookings from current week onward (canonical FEATURE#WEEK# records only)
     docClient.send(new QueryCommand({
       TableName:                 TABLE_NAME,
       IndexName:                 'GSI-WeeklyFeatureByStatus',
       KeyConditionExpression:    'featureStatus = :s AND isoWeek >= :week',
-      ExpressionAttributeValues: { ':s': 'CONFIRMED', ':week': currentWeek },
+      FilterExpression:          'begins_with(PK, :pkPrefix)',
+      ExpressionAttributeValues: { ':s': 'CONFIRMED', ':week': currentWeek, ':pkPrefix': 'FEATURE#WEEK#' },
     })).then((r) => (r.Items ?? []) as BookingItem[]),
-    // ACTIVE bookings (only current week)
+    // ACTIVE bookings (only current week, canonical records only)
     docClient.send(new QueryCommand({
       TableName:                 TABLE_NAME,
       IndexName:                 'GSI-WeeklyFeatureByStatus',
       KeyConditionExpression:    'featureStatus = :s AND isoWeek = :week',
-      ExpressionAttributeValues: { ':s': 'ACTIVE', ':week': currentWeek },
+      FilterExpression:          'begins_with(PK, :pkPrefix)',
+      ExpressionAttributeValues: { ':s': 'ACTIVE', ':week': currentWeek, ':pkPrefix': 'FEATURE#WEEK#' },
     })).then((r) => (r.Items ?? []) as BookingItem[]),
   ])
 

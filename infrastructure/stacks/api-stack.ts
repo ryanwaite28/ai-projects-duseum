@@ -333,7 +333,14 @@ export class ApiStack extends cdk.Stack {
     route('RouteGetArtwork',        'GET /artworks/{artworkId}',      artworksIntegration, 'NONE')
     route('RoutePostArtwork',       'POST /artworks',                 artworksIntegration, 'JWT')
     route('RoutePutArtwork',        'PUT /artworks/{artworkId}',      artworksIntegration, 'JWT')
-    route('RouteDeleteArtwork',     'DELETE /artworks/{artworkId}',   artworksIntegration, 'JWT')
+    route('RouteDeleteArtwork',          'DELETE /artworks/{artworkId}',                          artworksIntegration, 'JWT')
+    route('RoutePostCollection',         'POST /collections',                                     artworksIntegration, 'JWT')
+    route('RouteGetCollection',          'GET /collections/{collectionId}',                       artworksIntegration, 'NONE')
+    route('RoutePutCollection',          'PUT /collections/{collectionId}',                       artworksIntegration, 'JWT')
+    route('RouteDeleteCollection',       'DELETE /collections/{collectionId}',                    artworksIntegration, 'JWT')
+    route('RouteGetCollectionPieces',    'GET /collections/{collectionId}/pieces',                artworksIntegration, 'JWT')
+    route('RoutePostCollectionPiece',    'POST /collections/{collectionId}/pieces',               artworksIntegration, 'JWT')
+    route('RouteDeleteCollectionPiece',  'DELETE /collections/{collectionId}/pieces/{artworkId}', artworksIntegration, 'JWT')
     stage.node.addDependency(artworksIntegration)
 
     // =========================================================================
@@ -393,7 +400,10 @@ export class ApiStack extends cdk.Stack {
     route('RouteGetSubsMe',          'GET /subscriptions/me',                subsIntegration, 'JWT')
     route('RoutePostSubsPlatform',   'POST /subscriptions/platform',         subsIntegration, 'JWT')
     route('RoutePostSubsAuthor',     'POST /subscriptions/authors/{authorId}',subsIntegration, 'JWT')
-    route('RoutePostSubsPortal',     'POST /subscriptions/portal',           subsIntegration, 'JWT')
+    route('RoutePostSubsPortal',       'POST /subscriptions/portal',               subsIntegration, 'JWT')
+    route('RoutePostConnectOnboard',   'POST /subscriptions/connect/onboard',      subsIntegration, 'JWT')
+    route('RouteGetConnectStatus',     'GET /subscriptions/connect/status',         subsIntegration, 'JWT')
+    route('RoutePostSubPrice',         'POST /users/me/author/subscription-price',  subsIntegration, 'JWT')
     stage.node.addDependency(subsIntegration)
 
     // =========================================================================
@@ -541,7 +551,8 @@ export class ApiStack extends cdk.Stack {
     route('RouteGetFeaturesDaily',        'GET /features/daily',              featuresIntegration, 'NONE')
     route('RouteGetFeaturesWeekly',       'GET /features/weekly',             featuresIntegration, 'NONE')
     route('RouteGetFeaturesAvailability', 'GET /features/weekly/availability',featuresIntegration, 'NONE')
-    route('RoutePostFeaturesBook',        'POST /features/weekly/book',       featuresIntegration, 'JWT')
+    route('RoutePostFeaturesBook',        'POST /features/weekly/book',         featuresIntegration, 'JWT')
+    route('RouteGetFeaturesMyBookings',   'GET /features/weekly/my-bookings',   featuresIntegration, 'JWT')
     stage.node.addDependency(featuresIntegration)
 
     // =========================================================================

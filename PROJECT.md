@@ -175,6 +175,9 @@ To give artists a beautiful, museum-quality space to share their work — and to
 - **FR-SUB-08**: Authors can view subscription analytics: active subscriber count, monthly recurring revenue (MRR), churn rate
 - **FR-SUB-09**: Viewers can manage their subscriptions (cancel, update payment method) via a self-service portal (Stripe Billing Portal)
 - **FR-SUB-10**: Free-tier limits (pieces per Author visible to free viewers) are configurable by Admins without a code deploy (stored in SSM Parameter Store)
+- **FR-SUB-11**: After completing Stripe Connect Express onboarding, the Author is redirected to `/dashboard/author?connect=return`. The frontend must detect this query param, display a success notification, and invalidate the connect-status cache so the UI immediately reflects `chargesEnabled: true` without a page reload.
+- **FR-SUB-12**: If the Stripe Connect onboarding link expires before the Author completes onboarding, Stripe redirects to `/dashboard/author?connect=refresh`. The frontend must detect this param, automatically call `POST /subscriptions/connect/onboard` to obtain a fresh link, and redirect the Author back to Stripe without requiring manual interaction.
+- **FR-SUB-13**: Stripe fires `account.updated` on the platform webhook when a connected Express account's `charges_enabled` or `payouts_enabled` state changes. The `subscriptions-webhook-lambda` must handle this event by updating the Author's DynamoDB record with the current `connectChargesEnabled` boolean, so that `GET /subscriptions/connect/status` can read from DynamoDB first and only fall back to a live Stripe API call when the cached value is absent.
 
 ### 2.8 Discovery & Browse
 
@@ -536,6 +539,7 @@ Duseum uses a **single-table design** pattern with a main `duseum-{env}` table p
 | Weekly Feature Booking | `FEATURE#WEEK#{isoWeek}` | `AUTHOR#{authorId}` | One booking per Author per week slot; `isoWeek` = `YYYY-Www` (e.g. `2025-W32`) |
 | Weekly Feature by Author | `AUTHOR#{authorId}` | `FEATURE#WEEK#{isoWeek}` | Query all bookings by Author (eligibility check, history) |
 | Daily Feature Log | `FEATURE#DAILY` | `DATE#{isoDate}` | Log of daily featured Author selections; SK sorted by date for last-7 exclusion window |
+| Stripe Connect Lookup | `CONNECT#{stripeConnectAccountId}` | `META` | Reverse-lookup record: maps a Stripe Connect account ID → `userId`; written by `POST /subscriptions/connect/onboard` when the Connect account is first created; read by the `account.updated` webhook handler (FR-SUB-13) |
 
 **GSIs:**
 

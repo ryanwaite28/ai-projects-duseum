@@ -97,7 +97,7 @@ describe('daily-selection task', () => {
   })
 
   it('caps the exclusion list at 7 entries (FIFO)', async () => {
-    const existing = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6']
+    const existing = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7']
     await seedConfig({ PK: 'DAILY_FEATURED_EXCLUSIONS', authorIds: existing })
 
     await seedActiveAuthor('author-new')
@@ -109,7 +109,7 @@ describe('daily-selection task', () => {
     expect(exclusions.length).toBe(7)
     expect(exclusions[0]).toBe('author-new')
     expect(exclusions).toContain('e1')
-    expect(exclusions).not.toContain('e6')
+    expect(exclusions).not.toContain('e7')
   })
 
   it('skips writing when no eligible candidates exist', async () => {

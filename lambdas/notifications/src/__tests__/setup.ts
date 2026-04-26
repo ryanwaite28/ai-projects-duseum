@@ -146,7 +146,7 @@ export const seedViewerProfile = (
 export const seedUserAccount = (viewerId: string, email: string) =>
   seedItem({
     PK:     `USER#${viewerId}`,
-    SK:     'ACCOUNT',
+    SK:     'PROFILE',
     userId: viewerId,
     email,
   })

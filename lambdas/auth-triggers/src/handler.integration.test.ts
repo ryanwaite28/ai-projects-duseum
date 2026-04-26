@@ -7,12 +7,17 @@
 //
 // Environment (injected via vitest.config.ts):
 //   AWS_ENDPOINT_URL=http://localhost:4566
-//   DYNAMODB_TABLE_NAME=duseum-dev-dynamodb-main
+//   DYNAMODB_TABLE_NAME=duseum-test-auth-triggers
 // =============================================================================
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { PostConfirmationTriggerEvent } from 'aws-lambda'
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
+import {
+  CreateTableCommand,
+  DeleteTableCommand,
+  DynamoDBClient,
+  ResourceInUseException,
+} from '@aws-sdk/client-dynamodb'
 import { DeleteCommand, DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb'
 import { handler } from './handler.js'
 
@@ -31,7 +36,7 @@ const testClient = DynamoDBDocumentClient.from(rawClient, {
   marshallOptions: { removeUndefinedValues: true },
 })
 
-const TABLE = process.env['DYNAMODB_TABLE_NAME'] ?? 'duseum-dev-dynamodb-main'
+const TABLE = process.env['DYNAMODB_TABLE_NAME'] ?? 'duseum-test-auth-triggers'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -65,13 +70,38 @@ const makeEvent = (
     response: {},
   } as unknown as PostConfirmationTriggerEvent)
 
+// ── Table lifecycle ───────────────────────────────────────────────────────────
+
+beforeAll(async () => {
+  try {
+    await rawClient.send(new CreateTableCommand({
+      TableName: TABLE,
+      KeySchema: [
+        { AttributeName: 'PK', KeyType: 'HASH' },
+        { AttributeName: 'SK', KeyType: 'RANGE' },
+      ],
+      AttributeDefinitions: [
+        { AttributeName: 'PK', AttributeType: 'S' },
+        { AttributeName: 'SK', AttributeType: 'S' },
+      ],
+      BillingMode: 'PAY_PER_REQUEST',
+    }))
+  } catch (err) {
+    if (!(err instanceof ResourceInUseException)) throw err
+  }
+})
+
+afterAll(async () => {
+  await rawClient.send(new DeleteTableCommand({ TableName: TABLE })).catch(() => {})
+})
+
 // ── Cleanup: remove test records after each test ──────────────────────────────
 
 afterEach(async () => {
   await Promise.all([
     deleteItem(`USER#${TEST_USER_ID}`, 'PROFILE'),
     deleteItem(`USER#${TEST_USER_ID}`, 'PROFILE#VIEWER'),
-  ])
+  ]).catch(() => {})
 })
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

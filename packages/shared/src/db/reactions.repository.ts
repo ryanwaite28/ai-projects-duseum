@@ -34,8 +34,6 @@ const VALID_REACTION_TYPES = new Set<string>(['LOVE', 'WOW', 'FIRE', 'INSPIRED']
 export const isValidReactionType = (v: unknown): v is ReactionType =>
   typeof v === 'string' && VALID_REACTION_TYPES.has(v)
 
-const countAttr = (type: ReactionType) => `reactionCounts.${type}`
-
 // ── Reads ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -90,10 +88,7 @@ export const upsertReaction = async (
 ): Promise<Reaction> => {
   const reaction: Reaction = { artworkId, userId, reactionType, reactedAt }
 
-  const newCountAttr = countAttr(reactionType)
-
   if (previousType && previousType !== reactionType) {
-    const oldCountAttr = countAttr(previousType)
     await client.send(new TransactWriteCommand({
       TransactItems: [
         {
@@ -106,8 +101,8 @@ export const upsertReaction = async (
           Update: {
             TableName:                 TABLE_NAME,
             Key:                       artworkMetaKey(artworkId),
-            UpdateExpression:          `ADD #newCount :one, #oldCount :neg`,
-            ExpressionAttributeNames:  { '#newCount': newCountAttr, '#oldCount': oldCountAttr },
+            UpdateExpression:          'ADD #counts.#newType :one, #counts.#oldType :neg',
+            ExpressionAttributeNames:  { '#counts': 'reactionCounts', '#newType': reactionType, '#oldType': previousType },
             ExpressionAttributeValues: { ':one': 1, ':neg': -1 },
             ConditionExpression:       'attribute_exists(PK)',
           },
@@ -127,8 +122,8 @@ export const upsertReaction = async (
           Update: {
             TableName:                 TABLE_NAME,
             Key:                       artworkMetaKey(artworkId),
-            UpdateExpression:          `ADD #count :one`,
-            ExpressionAttributeNames:  { '#count': newCountAttr },
+            UpdateExpression:          'ADD #counts.#type :one',
+            ExpressionAttributeNames:  { '#counts': 'reactionCounts', '#type': reactionType },
             ExpressionAttributeValues: { ':one': 1 },
             ConditionExpression:       'attribute_exists(PK)',
           },
@@ -149,7 +144,6 @@ export const deleteReaction = async (
   userId: string,
   reactionType: ReactionType
 ): Promise<void> => {
-  const attr = countAttr(reactionType)
   await client.send(new TransactWriteCommand({
     TransactItems: [
       {
@@ -163,8 +157,8 @@ export const deleteReaction = async (
         Update: {
           TableName:                 TABLE_NAME,
           Key:                       artworkMetaKey(artworkId),
-          UpdateExpression:          `ADD #count :neg`,
-          ExpressionAttributeNames:  { '#count': attr },
+          UpdateExpression:          'ADD #counts.#type :neg',
+          ExpressionAttributeNames:  { '#counts': 'reactionCounts', '#type': reactionType },
           ExpressionAttributeValues: { ':neg': -1 },
           ConditionExpression:       'attribute_exists(PK)',
         },
