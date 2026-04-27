@@ -63,11 +63,13 @@ export class CdnStack extends cdk.Stack {
     cdk.Tags.of(this).add('Stack', this.stackName)
 
     // ── CDK context ───────────────────────────────────────────────────────────
-    const certArn       = this.node.tryGetContext(`certArn.${envName}`) as string
-    const keyPairId     = this.node.tryGetContext(`cloudfrontKeyPairId.${envName}`) as string
+    const certArn     = this.node.tryGetContext(`certArn.${envName}`) as string
+    const keyPairId   = this.node.tryGetContext(`cloudfrontKeyPairId.${envName}`) as string
+    const hostedZoneId = this.node.tryGetContext('hostedZoneId') as string
 
-    if (!certArn)   throw new Error(`Missing CDK context: certArn.${envName}`)
-    if (!keyPairId) throw new Error(`Missing CDK context: cloudfrontKeyPairId.${envName}`)
+    if (!certArn)      throw new Error(`Missing CDK context: certArn.${envName}`)
+    if (!keyPairId)    throw new Error(`Missing CDK context: cloudfrontKeyPairId.${envName}`)
+    if (!hostedZoneId) throw new Error('Missing CDK context: hostedZoneId')
 
     // ── Domain names ──────────────────────────────────────────────────────────
     const appDomain   = isProd ? 'duseum.com'             : `${envName}.duseum.com`
@@ -82,9 +84,12 @@ export class CdnStack extends cdk.Stack {
     // ACM cert — NEVER create a new one (Section CLAUDE.md / pre-provisioned infra)
     const certificate = acm.Certificate.fromCertificateArn(this, 'AcmCert', certArn)
 
-    // Route53 hosted zone — NEVER create a new one
-    const hostedZone = route53.HostedZone.fromLookup(this, 'HostedZone', {
-      domainName: 'duseum.com',
+    // Route53 hosted zone — NEVER create a new one.
+    // fromHostedZoneAttributes() uses no API calls at synth time (unlike fromLookup).
+    // hostedZoneId is a stable value set once in cdk.json context.
+    const hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
+      hostedZoneId,
+      zoneName: 'duseum.com',
     })
 
     // =========================================================================

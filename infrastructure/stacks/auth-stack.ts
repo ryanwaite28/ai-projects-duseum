@@ -13,7 +13,6 @@
 //   credentials are stored in Secrets Manager.
 // =============================================================================
 
-import * as path from 'path'
 import * as cdk from 'aws-cdk-lib'
 import * as cognito from 'aws-cdk-lib/aws-cognito'
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
@@ -159,7 +158,6 @@ export class AuthStack extends cdk.Stack {
     )
 
     const triggerFn = new DuseumLambdaFunction(this, 'auth-triggers', {
-      entry: path.resolve(__dirname, '../../lambdas/auth-triggers/src/handler.ts'),
       envName,
       description: 'Cognito Post-Confirmation: auto-creates UserAccount + ViewerProfile',
       reservedConcurrentExecutions: 10,

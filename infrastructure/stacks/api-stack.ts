@@ -15,13 +15,14 @@
 // No Fn.importValue(), no CfnOutput cross-stack references.
 // =============================================================================
 
-import * as path from 'node:path'
 import * as cdk from 'aws-cdk-lib'
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2'
 import * as events from 'aws-cdk-lib/aws-events'
 import * as targets from 'aws-cdk-lib/aws-events-targets'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources'
+import * as route53 from 'aws-cdk-lib/aws-route53'
+import * as route53Targets from 'aws-cdk-lib/aws-route53-targets'
 import * as sqs from 'aws-cdk-lib/aws-sqs'
 import * as ssm from 'aws-cdk-lib/aws-ssm'
 import * as wafv2 from 'aws-cdk-lib/aws-wafv2'
@@ -61,6 +62,21 @@ export class ApiStack extends cdk.Stack {
     cdk.Tags.of(this).add('Project', 'duseum')
     cdk.Tags.of(this).add('Environment', envName)
     cdk.Tags.of(this).add('Stack', this.stackName)
+
+    // ── CDK context ───────────────────────────────────────────────────────────
+    const apiCertArn   = this.node.tryGetContext(`apiCertArn.${envName}`) as string
+    const hostedZoneId = this.node.tryGetContext('hostedZoneId') as string
+
+    if (!apiCertArn)   throw new Error(`Missing CDK context: apiCertArn.${envName}`)
+    if (!hostedZoneId) throw new Error('Missing CDK context: hostedZoneId')
+
+    const isProd    = envName === 'prod'
+    const apiDomain = isProd ? 'api.duseum.com' : `api.${envName}.duseum.com`
+
+    const hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
+      hostedZoneId,
+      zoneName: 'duseum.com',
+    })
 
     // =========================================================================
     // SSM lookups — cross-stack outputs from infrastructure stacks
@@ -121,9 +137,9 @@ export class ApiStack extends cdk.Stack {
       name: `duseum-${envName}-apigw`,
       protocolType: 'HTTP',
       corsConfiguration: {
-        allowOrigins: envName === 'prod'
+        allowOrigins: isProd
           ? ['https://duseum.com', 'https://www.duseum.com']
-          : ['*'],
+          : ['https://dev.duseum.com', 'http://localhost:5173'],
         allowHeaders: ['Authorization', 'Content-Type', 'Stripe-Signature'],
         allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         maxAge: 86_400,
@@ -138,6 +154,39 @@ export class ApiStack extends cdk.Stack {
         throttlingBurstLimit: 500,
         throttlingRateLimit: 1_000,
       },
+    })
+
+    // =========================================================================
+    // Custom domain — api.{env}.duseum.com  (api.duseum.com for prod)
+    // ACM cert must be in us-east-1 and cover this domain (already pre-provisioned).
+    // =========================================================================
+
+    const customDomain = new apigatewayv2.CfnDomainName(this, 'ApiCustomDomain', {
+      domainName: apiDomain,
+      domainNameConfigurations: [
+        {
+          certificateArn: apiCertArn,
+          endpointType:   'REGIONAL',
+          securityPolicy: 'TLS_1_2',
+        },
+      ],
+    })
+
+    new apigatewayv2.CfnApiMapping(this, 'ApiDomainMapping', {
+      apiId:        httpApi.ref,
+      domainName:   customDomain.ref,
+      stage:        stage.ref,
+    })
+
+    new route53.ARecord(this, 'ApiAliasRecord', {
+      zone:       hostedZone,
+      recordName: apiDomain,
+      target:     route53.RecordTarget.fromAlias(
+        new route53Targets.ApiGatewayv2DomainProperties(
+          customDomain.attrRegionalDomainName,
+          customDomain.attrRegionalHostedZoneId,
+        )
+      ),
     })
 
     const jwtAuthorizer = new apigatewayv2.CfnAuthorizer(this, 'CognitoAuthorizer', {
@@ -266,7 +315,6 @@ export class ApiStack extends cdk.Stack {
 
     const mediaLambda = new DuseumLambdaFunction(this, 'media', {
       envName,
-      entry: path.resolve(__dirname, '../../lambdas/media/src/index.ts'),
       description: `[${envName}] media-lambda — presigned S3 upload URLs`,
       environment: { ...commonEnv },
       initialPolicy: [
@@ -296,7 +344,6 @@ export class ApiStack extends cdk.Stack {
 
     const artworksLambda = new DuseumLambdaFunction(this, 'artworks', {
       envName,
-      entry: path.resolve(__dirname, '../../lambdas/artworks/src/index.ts'),
       description: `[${envName}] artworks-lambda — artwork CRUD + access control`,
       environment: { ...commonEnv, NOTIFICATION_QUEUE_URL: notificationQueueUrl },
       initialPolicy: [
@@ -350,7 +397,6 @@ export class ApiStack extends cdk.Stack {
 
     const usersLambda = new DuseumLambdaFunction(this, 'users', {
       envName,
-      entry: path.resolve(__dirname, '../../lambdas/users/src/index.ts'),
       description: `[${envName}] users-lambda — user profiles, author directory, collections`,
       environment: { ...commonEnv },
       initialPolicy: [
@@ -382,7 +428,6 @@ export class ApiStack extends cdk.Stack {
 
     const subscriptionsLambda = new DuseumLambdaFunction(this, 'subscriptions', {
       envName,
-      entry: path.resolve(__dirname, '../../lambdas/subscriptions/src/index.ts'),
       description: `[${envName}] subscriptions-lambda — Stripe checkout + billing portal`,
       environment: { ...commonEnv },
       initialPolicy: [
@@ -415,7 +460,6 @@ export class ApiStack extends cdk.Stack {
 
     const stripeIngressLambda = new DuseumLambdaFunction(this, 'stripe-ingress', {
       envName,
-      entry: path.resolve(__dirname, '../../lambdas/subscriptions-webhook/src/ingress.ts'),
       description: `[${envName}] stripe-ingress-lambda — validate Stripe signature, enqueue to SQS`,
       environment: {
         ...commonEnv,
@@ -453,7 +497,6 @@ export class ApiStack extends cdk.Stack {
 
     const subsWebhookLambda = new DuseumLambdaFunction(this, 'subscriptions-webhook', {
       envName,
-      entry: path.resolve(__dirname, '../../lambdas/subscriptions-webhook/src/index.ts'),
       description: `[${envName}] subscriptions-webhook-lambda — process Stripe events from SQS`,
       environment: { ...commonEnv },
       initialPolicy: [
@@ -495,7 +538,6 @@ export class ApiStack extends cdk.Stack {
 
     const notificationsLambda = new DuseumLambdaFunction(this, 'notifications', {
       envName,
-      entry: path.resolve(__dirname, '../../lambdas/notifications/src/index.ts'),
       description: `[${envName}] notifications-lambda — fan-out new-piece emails via SES`,
       environment: { ...commonEnv },
       initialPolicy: [
@@ -527,7 +569,6 @@ export class ApiStack extends cdk.Stack {
 
     const featuresLambda = new DuseumLambdaFunction(this, 'features', {
       envName,
-      entry: path.resolve(__dirname, '../../lambdas/features/src/index.ts'),
       description: `[${envName}] features-lambda — daily/weekly featured authors + booking`,
       environment: { ...commonEnv },
       initialPolicy: [
@@ -562,7 +603,6 @@ export class ApiStack extends cdk.Stack {
 
     const socialLambda = new DuseumLambdaFunction(this, 'social', {
       envName,
-      entry: path.resolve(__dirname, '../../lambdas/social/src/index.ts'),
       description: `[${envName}] social-lambda — comments, reactions, follows`,
       environment: { ...commonEnv },
       initialPolicy: [mainTableCrudPolicy],
@@ -589,7 +629,6 @@ export class ApiStack extends cdk.Stack {
 
     const adminLambda = new DuseumLambdaFunction(this, 'admin', {
       envName,
-      entry: path.resolve(__dirname, '../../lambdas/admin/src/index.ts'),
       description: `[${envName}] admin-lambda — platform administration (ADMIN group only)`,
       environment: { ...commonEnv },
       initialPolicy: [
@@ -633,7 +672,6 @@ export class ApiStack extends cdk.Stack {
 
     const maintenanceLambda = new DuseumLambdaFunction(this, 'maintenance', {
       envName,
-      entry: path.resolve(__dirname, '../../lambdas/maintenance/src/index.ts'),
       description: `[${envName}] maintenance-lambda — daily feature selection + weekly rotation`,
       timeout: cdk.Duration.seconds(300), // up to 5 min for maintenance tasks
       environment: { ...commonEnv },
@@ -688,6 +726,12 @@ export class ApiStack extends cdk.Stack {
       parameterName: `${ssmPrefix}/api_gateway_id`,
       stringValue: httpApi.ref,
       description: `[${envName}] HTTP API Gateway ID`,
+    })
+
+    new ssm.StringParameter(this, 'SsmApiCustomDomain', {
+      parameterName: `${ssmPrefix}/api_custom_domain`,
+      stringValue:   apiDomain,
+      description:   `[${envName}] API custom domain (api.{env}.duseum.com)`,
     })
 
     const lambdaOutputs: [string, string, DuseumLambdaFunction][] = [
