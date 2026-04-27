@@ -10,8 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@duseum/shared": "*",
-    "@middy/core": "^5.5.1"
+    "@duseum/shared": "*"
   },
   "devDependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.693.0",

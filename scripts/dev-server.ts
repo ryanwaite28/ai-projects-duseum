@@ -198,7 +198,10 @@ async function invokeLambda(
 const PORT = 3001
 
 async function main(): Promise<void> {
-  // Load all handlers concurrently (non-blocking even if modules are absent)
+  // Load all handlers concurrently (non-blocking even if modules are absent).
+  // HTTP-facing lambdas export `handler` from their index.ts entry point.
+  // subscriptions-webhook uses ingress.ts as the HTTP entry point (index.ts is
+  // the SQS consumer — not reachable via HTTP in local dev).
   const [
     artworks,
     users,
@@ -209,14 +212,14 @@ async function main(): Promise<void> {
     media,
     features,
   ] = await Promise.all([
-    tryImport('../lambdas/artworks/src/handler.js',              'artworks-lambda'),
-    tryImport('../lambdas/users/src/handler.js',                 'users-lambda'),
-    tryImport('../lambdas/subscriptions/src/handler.js',         'subscriptions-lambda'),
-    tryImport('../lambdas/subscriptions-webhook/src/handler.js', 'subscriptions-webhook-lambda'),
-    tryImport('../lambdas/social/src/handler.js',                'social-lambda'),
-    tryImport('../lambdas/admin/src/handler.js',                 'admin-lambda'),
-    tryImport('../lambdas/media/src/handler.js',                 'media-lambda'),
-    tryImport('../lambdas/features/src/handler.js',              'features-lambda'),
+    tryImport('../lambdas/artworks/src/index.js',              'artworks-lambda'),
+    tryImport('../lambdas/users/src/index.js',                 'users-lambda'),
+    tryImport('../lambdas/subscriptions/src/index.js',         'subscriptions-lambda'),
+    tryImport('../lambdas/subscriptions-webhook/src/ingress.js','subscriptions-webhook-lambda'),
+    tryImport('../lambdas/social/src/index.js',                'social-lambda'),
+    tryImport('../lambdas/admin/src/index.js',                 'admin-lambda'),
+    tryImport('../lambdas/media/src/index.js',                 'media-lambda'),
+    tryImport('../lambdas/features/src/index.js',              'features-lambda'),
   ])
 
   const app = express()
@@ -225,15 +228,51 @@ async function main(): Promise<void> {
   app.use(express.raw({ type: '*/*', limit: '25mb' }))
 
   // ── Route table (order matters — more-specific first) ────────────────────────
-  app.all('/webhooks/stripe', (req, res) => invokeLambda(subscriptionsWebhook, req, res))
-  app.all('/artworks*',       (req, res) => invokeLambda(artworks,             req, res))
-  app.all('/users*',          (req, res) => invokeLambda(users,                req, res))
-  app.all('/subscriptions*',  (req, res) => invokeLambda(subscriptions,        req, res))
-  app.all('/comments*',       (req, res) => invokeLambda(social,               req, res))
-  app.all('/reactions*',      (req, res) => invokeLambda(social,               req, res))
-  app.all('/admin*',          (req, res) => invokeLambda(admin,                req, res))
-  app.all('/media*',          (req, res) => invokeLambda(media,                req, res))
-  app.all('/features*',       (req, res) => invokeLambda(features,             req, res))
+  // Express 5 / path-to-regexp v8: use {/*rest} for optional rest segments.
+  //
+  // Routing mirrors the API Gateway integration map from §4.2:
+  //   - social-lambda owns /artworks/:id/comments and /artworks/:id/reactions
+  //     → must be registered before the generic /artworks catch-all
+  //   - subscriptions-lambda owns POST /users/me/author/subscription-price
+  //     → registered before the /users catch-all
+  //   - /collections and /authors/:id/collections belong to artworks-lambda (§4.2)
+  //   - /authors, /follows, /notifications belong to users-lambda
+  //   - subscriptions-webhook ingress receives raw Stripe HTTP POST locally;
+  //     in production this is an API GW → SQS direct integration (no Lambda)
+
+  // Stripe webhook ingress (HTTP) — must be exact before any prefix catch-alls
+  app.all('/webhooks/stripe',                  (req, res) => invokeLambda(subscriptionsWebhook, req, res))
+
+  // social-lambda: comment + reaction sub-routes nested under /artworks
+  app.all('/artworks/:artworkId/comments',     (req, res) => invokeLambda(social,               req, res))
+  app.all('/artworks/:artworkId/reactions',    (req, res) => invokeLambda(social,               req, res))
+
+  // social-lambda: top-level comment deletion
+  app.all('/comments{/*rest}',                 (req, res) => invokeLambda(social,               req, res))
+
+  // subscriptions-lambda: cross-domain route that lives under /users path
+  app.post('/users/me/author/subscription-price', (req, res) => invokeLambda(subscriptions,     req, res))
+
+  // artworks-lambda: artwork CRUD + collections
+  app.all('/artworks{/*rest}',                 (req, res) => invokeLambda(artworks,             req, res))
+  app.all('/collections{/*rest}',              (req, res) => invokeLambda(artworks,             req, res))
+
+  // artworks-lambda: /authors/:id/collections (artworks owns collection entity)
+  app.get('/authors/:authorId/collections',    (req, res) => invokeLambda(artworks,             req, res))
+
+  // users-lambda: remaining /authors, /users, /follows, /notifications
+  app.all('/authors{/*rest}',                  (req, res) => invokeLambda(users,                req, res))
+  app.all('/users{/*rest}',                    (req, res) => invokeLambda(users,                req, res))
+  app.all('/follows{/*rest}',                  (req, res) => invokeLambda(users,                req, res))
+  app.all('/notifications{/*rest}',            (req, res) => invokeLambda(users,                req, res))
+
+  // subscriptions-lambda
+  app.all('/subscriptions{/*rest}',            (req, res) => invokeLambda(subscriptions,        req, res))
+
+  // admin, media, features
+  app.all('/admin{/*rest}',                    (req, res) => invokeLambda(admin,                req, res))
+  app.all('/media{/*rest}',                    (req, res) => invokeLambda(media,                req, res))
+  app.all('/features{/*rest}',                 (req, res) => invokeLambda(features,             req, res))
 
   app.listen(PORT, () => {
     console.log(`\n[dev-server] Local Lambda server running at http://localhost:${PORT}`)
