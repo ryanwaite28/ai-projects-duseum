@@ -27,6 +27,12 @@ jobs:
   build:
     name: Build & Upload Lambda ZIPs
     runs-on: ubuntu-latest
+    # Artifact bucket always lives in the dev account — dev environment required
+    # so the OIDC sub claim matches the deploy-dev role trust policy.
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
     outputs:
       artifact-bucket: ${{ steps.upload.outputs.bucket }}
 

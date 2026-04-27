@@ -46,6 +46,7 @@ jobs:
     name: Smoke Test (prod)
     needs: [deploy-prod]
     runs-on: ubuntu-latest
+    environment: prod
     permissions:
       id-token: write
       contents: read
