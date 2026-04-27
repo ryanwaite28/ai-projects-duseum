@@ -67,4 +67,4 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
           aws-region: us-east-1
       - name: Run smoke tests
-        run: bash scripts/smoke-test.sh dev
+        run: bash scripts/smoke-test.sh dev ${{ github.sha }}
