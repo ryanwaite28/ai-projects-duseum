@@ -23,8 +23,10 @@
 import * as cdk from 'aws-cdk-lib'
 import * as acm from 'aws-cdk-lib/aws-certificatemanager'
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
+import * as iam from 'aws-cdk-lib/aws-iam'
 import * as route53 from 'aws-cdk-lib/aws-route53'
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets'
+import * as s3 from 'aws-cdk-lib/aws-s3'
 import * as ssm from 'aws-cdk-lib/aws-ssm'
 import * as wafv2 from 'aws-cdk-lib/aws-wafv2'
 import { Construct } from 'constructs'
@@ -388,8 +390,44 @@ export class CdnStack extends cdk.Stack {
       description:   `[${envName}] ACM certificate ARN`,
     })
 
-    // SPA bucket name — needed by GitHub Actions deploy step to sync built assets
-    void spaBucketName
-    void mediaBucketName
+    // =========================================================================
+    // S3 Bucket Policies — grant CloudFront OAC service principal read access
+    // Required with L1 CfnDistribution + CfnOriginAccessControl; CDK does not
+    // add these automatically (unlike L2 Distribution with S3Origin).
+    // =========================================================================
+
+    const spaBucketRef = s3.Bucket.fromBucketName(this, 'SpaBucketRef', spaBucketName)
+    spaBucketRef.addToResourcePolicy(new iam.PolicyStatement({
+      sid:     'AllowCloudFrontOACSpa',
+      effect:  iam.Effect.ALLOW,
+      principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
+      actions:    ['s3:GetObject'],
+      resources:  [spaBucketRef.arnForObjects('*')],
+      conditions: {
+        StringEquals: {
+          'AWS:SourceArn': cdk.Fn.sub(
+            'arn:aws:cloudfront::${AWS::AccountId}:distribution/${D}',
+            { D: appDistribution.attrId }
+          ),
+        },
+      },
+    }))
+
+    const mediaBucketRef = s3.Bucket.fromBucketName(this, 'MediaBucketRef', mediaBucketName)
+    mediaBucketRef.addToResourcePolicy(new iam.PolicyStatement({
+      sid:     'AllowCloudFrontOACMedia',
+      effect:  iam.Effect.ALLOW,
+      principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
+      actions:    ['s3:GetObject'],
+      resources:  [mediaBucketRef.arnForObjects('*')],
+      conditions: {
+        StringEquals: {
+          'AWS:SourceArn': cdk.Fn.sub(
+            'arn:aws:cloudfront::${AWS::AccountId}:distribution/${D}',
+            { D: mediaDistribution.attrId }
+          ),
+        },
+      },
+    }))
   }
 }
