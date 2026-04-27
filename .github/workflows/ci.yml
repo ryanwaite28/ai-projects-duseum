@@ -97,7 +97,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: CDK synth dev
-        run: cd infrastructure && npx cdk synth --strict --context env=dev
+        run: cd infrastructure && npx cdk synth "duseum-dev/**" --strict --context env=dev
 
   # ── CDK synth validate — prod ────────────────────────────────────────────────
   cdk-synth-prod:
@@ -111,4 +111,4 @@ jobs:
           cache: npm
       - run: npm ci
       - name: CDK synth prod
-        run: cd infrastructure && npx cdk synth --strict --context env=prod
+        run: cd infrastructure && npx cdk synth "duseum-prod/**" --strict --context env=prod
