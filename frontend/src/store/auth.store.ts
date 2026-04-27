@@ -20,13 +20,70 @@ interface AuthState {
   error: string | null
 
   // Actions
-  initialize: () => Promise<void>
-  signIn:     (email: string, password: string) => Promise<void>
-  signOut:    () => Promise<void>
-  signUp:     (email: string, password: string) => Promise<void>
+  initialize:   () => Promise<void>
+  signIn:       (email: string, password: string) => Promise<void>
+  signOut:      () => Promise<void>
+  signUp:       (email: string, password: string) => Promise<void>
   confirmEmail: (email: string, code: string) => Promise<void>
-  clearError: () => void
+  clearError:   () => void
 }
+
+// =============================================================================
+// Local dev auth stub — active when VITE_AUTH_STUB=true (frontend/.env.local)
+//
+// Bypasses Cognito entirely. Stores a simple user registry + session in
+// localStorage. The Lambda auth middleware in ENVIRONMENT=local accepts any
+// JWT by decoding the payload without signature verification, so we fabricate
+// a minimal JWT with the user's UUID as `sub`.
+// =============================================================================
+
+const IS_LOCAL_AUTH = import.meta.env.VITE_AUTH_STUB === 'true'
+
+const LOCAL_USERS_KEY   = 'duseum_local_users'
+const LOCAL_SESSION_KEY = 'duseum_local_session'
+
+interface LocalUser    { userId: string; email: string; password: string }
+interface LocalSession { userId: string; email: string; jwt: string }
+
+const toBase64Url = (obj: unknown): string =>
+  btoa(JSON.stringify(obj))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+
+const makeLocalJwt = (userId: string, email: string): string => {
+  const header  = toBase64Url({ alg: 'none', typ: 'JWT' })
+  const payload = toBase64Url({
+    sub: userId,
+    email,
+    'cognito:groups': [],
+    exp: Math.floor(Date.now() / 1000) + 86400 * 7,
+  })
+  return `${header}.${payload}.local-stub`
+}
+
+const localUsers = {
+  all: (): LocalUser[] => {
+    try { return JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) ?? '[]') } catch { return [] }
+  },
+  find: (email: string): LocalUser | null =>
+    localUsers.all().find(u => u.email === email) ?? null,
+  save: (user: LocalUser): void => {
+    const list = localUsers.all().filter(u => u.email !== user.email)
+    list.push(user)
+    localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(list))
+  },
+}
+
+const localSession = {
+  get:   (): LocalSession | null => {
+    try { return JSON.parse(localStorage.getItem(LOCAL_SESSION_KEY) ?? 'null') } catch { return null }
+  },
+  set:   (s: LocalSession): void => localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(s)),
+  clear: (): void => localStorage.removeItem(LOCAL_SESSION_KEY),
+}
+
+// =============================================================================
 
 export const useAuthStore = create<AuthState>((set) => ({
   user:      null,
@@ -34,6 +91,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   error:     null,
 
   initialize: async () => {
+    if (IS_LOCAL_AUTH) {
+      const s = localSession.get()
+      set({ user: s ? { userId: s.userId, email: s.email, displayName: s.email } : null, isLoading: false })
+      return
+    }
     try {
       const cognitoUser = await getCurrentUser()
       set({
@@ -51,6 +113,18 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signIn: async (email, password) => {
     set({ isLoading: true, error: null })
+    if (IS_LOCAL_AUTH) {
+      const stored = localUsers.find(email)
+      if (!stored || stored.password !== password) {
+        const msg = 'Invalid email or password'
+        set({ error: msg, isLoading: false })
+        throw new Error(msg)
+      }
+      const jwt = makeLocalJwt(stored.userId, stored.email)
+      localSession.set({ userId: stored.userId, email: stored.email, jwt })
+      set({ user: { userId: stored.userId, email: stored.email, displayName: stored.email }, isLoading: false })
+      return
+    }
     try {
       await amplifySignIn({ username: email, password })
       const cognitoUser = await getCurrentUser()
@@ -71,6 +145,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: async () => {
     set({ isLoading: true })
+    if (IS_LOCAL_AUTH) {
+      localSession.clear()
+      set({ user: null, isLoading: false, error: null })
+      return
+    }
     try {
       await amplifySignOut()
     } finally {
@@ -80,6 +159,17 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signUp: async (email, password) => {
     set({ isLoading: true, error: null })
+    if (IS_LOCAL_AUTH) {
+      if (localUsers.find(email)) {
+        const msg = 'An account with this email already exists'
+        set({ error: msg, isLoading: false })
+        throw new Error(msg)
+      }
+      const userId = crypto.randomUUID()
+      localUsers.save({ userId, email, password })
+      set({ isLoading: false })
+      return
+    }
     try {
       await amplifySignUp({
         username: email,
@@ -94,10 +184,21 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  confirmEmail: async (email, code) => {
+  confirmEmail: async (email, _code) => {
     set({ isLoading: true, error: null })
+    if (IS_LOCAL_AUTH) {
+      const stored = localUsers.find(email)
+      if (!stored) {
+        const msg = 'No account found for this email. Please register first.'
+        set({ error: msg, isLoading: false })
+        throw new Error(msg)
+      }
+      // Stub: accept any code — account is "verified" immediately
+      set({ isLoading: false })
+      return
+    }
     try {
-      await confirmSignUp({ username: email, confirmationCode: code })
+      await confirmSignUp({ username: email, confirmationCode: _code })
       set({ isLoading: false })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Confirmation failed'
@@ -109,8 +210,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   clearError: () => set({ error: null }),
 }))
 
-// Fetch a fresh access token for API calls — always reads from Amplify session
+// Fetch a fresh access token for API calls — stub-aware
 export const getAccessToken = async (): Promise<string | null> => {
+  if (IS_LOCAL_AUTH) {
+    return localSession.get()?.jwt ?? null
+  }
   try {
     const session = await fetchAuthSession()
     return session.tokens?.accessToken?.toString() ?? null

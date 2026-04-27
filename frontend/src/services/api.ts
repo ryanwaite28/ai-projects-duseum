@@ -1,4 +1,5 @@
 import { fetchAuthSession } from 'aws-amplify/auth'
+import { getAccessToken } from '../store/auth.store'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL as string
 
@@ -13,6 +14,10 @@ export class ApiError extends Error {
 }
 
 const getToken = async (forceRefresh = false): Promise<string | null> => {
+  // Local auth stub returns the fabricated JWT; real Cognito uses Amplify.
+  if (import.meta.env.VITE_AUTH_STUB === 'true') {
+    return getAccessToken()
+  }
   try {
     const session = await fetchAuthSession({ forceRefresh })
     return session.tokens?.accessToken?.toString() ?? null
