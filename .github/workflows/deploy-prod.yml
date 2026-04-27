@@ -18,15 +18,15 @@ jobs:
     secrets: inherit
 
   # ── Build Lambda ZIPs and upload to S3 artifact bucket ──────────────────────
-  # Uses dev role since the artifact bucket lives in the shared account.
   build:
     name: Build
     needs: [ci]
     uses: ./.github/workflows/_build-lambdas.yml
     with:
       sha: ${{ github.sha }}
+      environment: build
     secrets:
-      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_BUILD }}
 
   # ── Deploy all CDK stacks to prod ────────────────────────────────────────────
   # The "prod" GitHub Environment requires manual approval before this job runs.
@@ -46,6 +46,7 @@ jobs:
     name: Smoke Test (prod)
     needs: [deploy-prod]
     runs-on: ubuntu-latest
+    environment: prod
     permissions:
       id-token: write
       contents: read

@@ -1,11 +1,16 @@
 name: Build Lambdas (reusable)
 
 # Builds all Lambda functions with esbuild (tree-shaken, bundled, minified,
-# node20 target) and uploads ZIPs to the S3 artifact bucket at:
-#   s3://duseum-dev-lambda-artifacts/{sha}/{name}/function.zip
+# node20 target) and uploads ZIPs to the shared CI/CD artifact bucket at:
+#   s3://duseum-cicd-artifacts/{env}/lambda/{sha}/{name}/function.zip
 #
-# Prerequisite: S3 bucket duseum-dev-lambda-artifacts must exist in account
-# 408141212087 (created once manually or via bootstrap script).
+# Prerequisite: S3 bucket duseum-cicd-artifacts must exist in account
+# 408141212087 — created by scripts/bootstrap.sh (Section 3.5).
+#
+# The "environment" input controls both the GitHub Environment (OIDC sub claim)
+# and the S3 key prefix — both callers should pass environment: build so the
+# build step uses the dedicated least-privilege build role rather than a
+# deploy role tied to dev or prod.
 
 on:
   workflow_call:
@@ -14,6 +19,10 @@ on:
         required: true
         type: string
         description: Git SHA used as the S3 prefix for this build
+      environment:
+        required: true
+        type: string
+        description: GitHub Environment to run under (controls OIDC sub claim for role assumption)
     outputs:
       artifact-bucket:
         description: S3 bucket where ZIPs were uploaded
@@ -21,12 +30,16 @@ on:
     secrets:
       AWS_ROLE_ARN_BUILD:
         required: true
-        description: IAM role ARN for S3 upload (deploy-dev role has s3:PutObject on artifact bucket)
+        description: ARN of duseum-github-actions-build — least-privilege role with s3:PutObject on duseum-cicd-artifacts only
 
 jobs:
   build:
     name: Build & Upload Lambda ZIPs
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
     outputs:
       artifact-bucket: ${{ steps.upload.outputs.bucket }}
 
@@ -68,13 +81,14 @@ jobs:
       - name: Upload ZIPs to S3
         id: upload
         run: |
-          BUCKET="duseum-dev-lambda-artifacts"
+          BUCKET="duseum-cicd-artifacts"
+          ENV="${{ inputs.environment }}"
           SHA="${{ inputs.sha }}"
           LAMBDAS="admin artworks auth-triggers features maintenance media notifications social subscriptions subscriptions-webhook users"
           for NAME in $LAMBDAS; do
             aws s3 cp dist/lambdas/$NAME/function.zip \
-              s3://$BUCKET/$SHA/$NAME/function.zip \
+              s3://$BUCKET/$ENV/lambda/$SHA/$NAME/function.zip \
               --region us-east-1
-            echo "Uploaded s3://$BUCKET/$SHA/$NAME/function.zip"
+            echo "Uploaded s3://$BUCKET/$ENV/lambda/$SHA/$NAME/function.zip"
           done
           echo "bucket=$BUCKET" >> $GITHUB_OUTPUT

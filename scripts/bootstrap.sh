@@ -1042,6 +1042,98 @@ put_ssm "/duseum/dev/stripe/publishable_key"  "$DEV_STRIPE_PK"  "dev"
 put_ssm "/duseum/prod/stripe/publishable_key" "$PROD_STRIPE_PK" "prod"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 3.5 — CI/CD artifact bucket
+#
+# Shared bucket used by both dev and prod pipelines. Not environment-specific —
+# isolation is via the S3 key prefix: {env}/lambda/{sha}/{name}/function.zip
+#
+# Name is intentionally free of the {env} segment (it serves both environments)
+# and is stored in SSM so CDK stacks and scripts can reference it without
+# hardcoding. The single known exception is _build-lambdas.yml, which must know
+# the name before it can assume any role (chicken-and-egg).
+#
+# IAM: both deploy roles carry AdministratorAccess — no explicit bucket policy
+# is required. Public access is blocked and SSE-S3 is applied for defence in depth.
+# Lifecycle rules expire dev artifacts after 7 days and prod after 30 days to
+# prevent unbounded accumulation.
+# ═══════════════════════════════════════════════════════════════════════════════
+step "CI/CD artifact bucket — duseum-cicd-artifacts"
+
+CICD_BUCKET="duseum-cicd-artifacts"
+
+if aws_cmd s3api head-bucket --bucket "$CICD_BUCKET" &>/dev/null; then
+  success "  s3://${CICD_BUCKET} (exists — skipping create)"
+else
+  info "  Creating s3://${CICD_BUCKET}..."
+  aws_cmd s3api create-bucket \
+    --bucket "$CICD_BUCKET" \
+    --region "$AWS_REGION" \
+    --create-bucket-configuration "LocationConstraint=${AWS_REGION}" \
+    --output text >/dev/null 2>/dev/null || \
+  aws_cmd s3api create-bucket \
+    --bucket "$CICD_BUCKET" \
+    --region "$AWS_REGION" \
+    --output text >/dev/null
+  success "  s3://${CICD_BUCKET} created"
+fi
+
+# Block all public access
+aws_cmd s3api put-public-access-block \
+  --bucket "$CICD_BUCKET" \
+  --public-access-block-configuration \
+    'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true' \
+  --output text >/dev/null
+success "  Public access blocked"
+
+# Enable SSE-S3 (server-side encryption)
+aws_cmd s3api put-bucket-encryption \
+  --bucket "$CICD_BUCKET" \
+  --server-side-encryption-configuration '{
+    "Rules": [{
+      "ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"},
+      "BucketKeyEnabled": true
+    }]
+  }' --output text >/dev/null
+success "  SSE-S3 enabled"
+
+# Lifecycle rules: expire dev artifacts after 7 days, prod after 30 days
+aws_cmd s3api put-bucket-lifecycle-configuration \
+  --bucket "$CICD_BUCKET" \
+  --lifecycle-configuration '{
+    "Rules": [
+      {
+        "ID": "expire-dev-artifacts",
+        "Status": "Enabled",
+        "Filter": {"Prefix": "dev/"},
+        "Expiration": {"Days": 7}
+      },
+      {
+        "ID": "expire-prod-artifacts",
+        "Status": "Enabled",
+        "Filter": {"Prefix": "prod/"},
+        "Expiration": {"Days": 30}
+      }
+    ]
+  }' --output text >/dev/null
+success "  Lifecycle rules: dev/→7d, prod/→30d"
+
+# Tag the bucket as shared infrastructure (not tied to one environment)
+aws_cmd s3api put-bucket-tagging \
+  --bucket "$CICD_BUCKET" \
+  --tagging '{
+    "TagSet": [
+      {"Key": "Project",     "Value": "duseum"},
+      {"Key": "Environment", "Value": "shared"},
+      {"Key": "ManagedBy",   "Value": "bootstrap"}
+    ]
+  }' --output text >/dev/null
+success "  Tags applied (Environment=shared)"
+
+# Store bucket name in SSM — authoritative reference for CDK stacks and scripts
+put_ssm "/duseum/cicd/artifact_bucket_name" "$CICD_BUCKET" "shared"
+success "  SSM: /duseum/cicd/artifact_bucket_name = ${CICD_BUCKET}"
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 4 — CloudFront RSA key pairs + key groups (for signed URLs)
 # ═══════════════════════════════════════════════════════════════════════════════
 provision_cloudfront_key() {
@@ -1244,11 +1336,94 @@ provision_deploy_role() {
 provision_deploy_role "dev"
 provision_deploy_role "prod"
 
+# ── Build role — least-privilege, environment:build, S3-only ─────────────────
+# Separate from the deploy roles so neither dev nor prod deployment is a
+# prerequisite for running the build step. Decouples artifact upload from
+# CDK deploy permissions and from any specific environment.
+step "IAM role — duseum-github-actions-build"
+
+BUILD_ROLE_NAME="duseum-github-actions-build"
+BUILD_ROLE_SSM="/duseum/cicd/github_build_role_arn"
+
+BUILD_TRUST=$(jq -n \
+  --arg oidc_arn "$GITHUB_OIDC_PROVIDER_ARN" \
+  --arg sub      "repo:${GITHUB_REPO}:environment:build" \
+  '{
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Allow",
+      Principal: { Federated: $oidc_arn },
+      Action: "sts:AssumeRoleWithWebIdentity",
+      Condition: {
+        StringEquals: {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        StringLike: {
+          "token.actions.githubusercontent.com:sub": $sub
+        }
+      }
+    }]
+  }')
+
+if iam_role_exists "$BUILD_ROLE_NAME"; then
+  info "  Role already exists — refreshing trust policy"
+  aws_cmd iam update-assume-role-policy \
+    --role-name "$BUILD_ROLE_NAME" \
+    --policy-document "$BUILD_TRUST" >/dev/null
+  success "  Trust policy refreshed for ${BUILD_ROLE_NAME}"
+else
+  aws_cmd iam create-role \
+    --role-name "$BUILD_ROLE_NAME" \
+    --assume-role-policy-document "$BUILD_TRUST" \
+    --description "GitHub Actions OIDC build role - s3:PutObject on duseum-cicd-artifacts only" \
+    --max-session-duration 3600 \
+    --tags \
+      "Key=Project,Value=duseum" \
+      "Key=Environment,Value=shared" \
+      "Key=ManagedBy,Value=bootstrap" \
+    --output text >/dev/null
+  success "  Role created: ${BUILD_ROLE_NAME}"
+fi
+
+# Least-privilege inline policy — only what aws s3 cp needs to upload ZIPs
+BUILD_POLICY=$(jq -n \
+  --arg bucket_arn "arn:aws:s3:::duseum-cicd-artifacts" \
+  '{
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "UploadArtifacts",
+        Effect: "Allow",
+        Action: ["s3:PutObject"],
+        Resource: ($bucket_arn + "/*")
+      },
+      {
+        Sid: "BucketLocation",
+        Effect: "Allow",
+        Action: ["s3:GetBucketLocation"],
+        Resource: $bucket_arn
+      }
+    ]
+  }')
+
+aws_cmd iam put-role-policy \
+  --role-name "$BUILD_ROLE_NAME" \
+  --policy-name "duseum-cicd-artifact-upload" \
+  --policy-document "$BUILD_POLICY" >/dev/null
+success "  Inline policy: s3:PutObject + s3:GetBucketLocation on duseum-cicd-artifacts"
+
+BUILD_ROLE_ARN=$(aws_cmd iam get-role \
+  --role-name "$BUILD_ROLE_NAME" \
+  --query 'Role.Arn' --output text)
+put_ssm "$BUILD_ROLE_SSM" "$BUILD_ROLE_ARN" "shared"
+success "  ${BUILD_ROLE_NAME}: ${BUILD_ROLE_ARN}"
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════════════════
 DEV_ROLE_ARN=$(get_ssm "/duseum/dev/iam/github_deploy_role_arn")
 PROD_ROLE_ARN=$(get_ssm "/duseum/prod/iam/github_deploy_role_arn")
+BUILD_ROLE_ARN=$(get_ssm "/duseum/cicd/github_build_role_arn")
 DEV_CF_KEY_ID=$(get_ssm "/duseum/dev/cloudfront/key_pair_id")
 PROD_CF_KEY_ID=$(get_ssm "/duseum/prod/cloudfront/key_pair_id")
 
@@ -1257,12 +1432,17 @@ echo -e "${BOLD}${GREEN}══════════════════�
 echo -e "${BOLD}${GREEN}  Bootstrap complete!${NC}"
 echo -e "${BOLD}${GREEN}════════════════════════════════════════════════════════════════${NC}"
 echo ""
+echo -e "${BOLD}CI/CD artifact bucket:${NC}"
+echo "  s3://duseum-cicd-artifacts"
+echo "  dev/  → expires 7 days  |  prod/ → expires 30 days"
+echo ""
 echo -e "${BOLD}Next: add these as GitHub Actions secrets${NC}"
 echo "  Repo → Settings → Secrets and variables → Actions:"
 echo ""
-echo "  AWS_ACCOUNT_ID    = ${AWS_ACCOUNT_ID}"
-echo "  AWS_ROLE_ARN_DEV  = ${DEV_ROLE_ARN}"
-echo "  AWS_ROLE_ARN_PROD = ${PROD_ROLE_ARN}"
+echo "  AWS_ACCOUNT_ID           = ${AWS_ACCOUNT_ID}"
+echo "  AWS_ROLE_ARN_BUILD       = ${BUILD_ROLE_ARN}"
+echo "  AWS_ROLE_ARN_DEPLOY_DEV  = ${DEV_ROLE_ARN}"
+echo "  AWS_ROLE_ARN_DEPLOY_PROD = ${PROD_ROLE_ARN}"
 echo ""
 echo -e "${BOLD}Next: create GitHub Environments${NC}"
 echo "  Repo → Settings → Environments:"

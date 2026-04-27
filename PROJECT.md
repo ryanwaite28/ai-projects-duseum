@@ -2334,20 +2334,36 @@ CDK asset:  {github.sha}  (passed as CDK context variable)
 
 ### 9.4 Reusable Workflow — `_build-lambdas.yml`
 
-Builds all Lambda functions with esbuild (tree-shaken, bundled, minified). Uploads ZIPs to S3 artifact bucket. Called by both `deploy-dev.yml` and `deploy-prod.yml`.
+Builds all Lambda functions with esbuild (tree-shaken, bundled, minified). Uploads ZIPs to the shared CI/CD artifact bucket. Called by both `deploy-dev.yml` and `deploy-prod.yml`.
+
+**Artifact bucket**: `duseum-cicd-artifacts` — pre-provisioned shared bucket (not environment-specific). Both dev and prod pipelines upload to this bucket, namespaced by environment in the S3 key path.
+
+**S3 path convention**:
+```
+duseum-cicd-artifacts/{env}/lambda/{sha}/{name}/function.zip
+duseum-cicd-artifacts/{env}/api-gateway/{sha}/...
+duseum-cicd-artifacts/{env}/misc/{sha}/...
+```
+
+The `{env}/` prefix provides logical isolation between dev and prod artifacts within the shared bucket. Lifecycle rules should be configured to expire objects under each prefix independently (e.g., dev artifacts expire after 7 days; prod artifacts after 30 days).
 
 ```yaml
 # .github/workflows/_build-lambdas.yml
 on:
   workflow_call:
     inputs:
-      sha: { type: string, required: true }
+      sha:         { type: string, required: true }
+      environment: { type: string, required: true }   # dev | prod — sets S3 key prefix and OIDC env
     outputs:
       artifact-bucket: { value: ${{ jobs.build.outputs.artifact-bucket }} }
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}            # OIDC sub claim must match role trust policy
+    permissions:
+      id-token: write
+      contents: read
     outputs:
       artifact-bucket: ${{ steps.upload.outputs.bucket }}
     steps:
@@ -2359,10 +2375,12 @@ jobs:
       # Each lambda outputs a ZIP to dist/lambdas/{name}/function.zip
       - id: upload
         run: |
-          BUCKET="duseum-dev-lambda-artifacts"
+          BUCKET="duseum-cicd-artifacts"
+          ENV="${{ inputs.environment }}"
+          SHA="${{ inputs.sha }}"
           for ZIP in dist/lambdas/*/function.zip; do
             NAME=$(basename $(dirname $ZIP))
-            aws s3 cp $ZIP s3://$BUCKET/${{ inputs.sha }}/$NAME/function.zip
+            aws s3 cp $ZIP s3://$BUCKET/$ENV/lambda/$SHA/$NAME/function.zip
           done
           echo "bucket=$BUCKET" >> $GITHUB_OUTPUT
 ```

@@ -23,8 +23,9 @@ jobs:
     uses: ./.github/workflows/_build-lambdas.yml
     with:
       sha: ${{ github.sha }}
+      environment: build
     secrets:
-      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_BUILD }}
 
   # ── Deploy all CDK stacks to dev ─────────────────────────────────────────────
   deploy:
@@ -42,6 +43,7 @@ jobs:
     name: Smoke Test (dev)
     needs: [deploy]
     runs-on: ubuntu-latest
+    environment: dev
     permissions:
       id-token: write
       contents: read
