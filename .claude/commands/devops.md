@@ -139,12 +139,16 @@ RECOMMENDATIONS (non-blocking)
 6. A CDK change removes or renames an existing DynamoDB attribute or GSI key (data loss risk)
 7. A workflow hardcodes a resource name, ARN, or account ID that should come from SSM or a secret
 8. A new reusable workflow hardcodes the `environment:` value instead of accepting it as an input
+9. A `CfnWebACLAssociation` targets an API Gateway HTTP API ARN (`/apis/{id}/stages/$default`) — WAF REGIONAL does not support HTTP API v2; CloudFormation will fail at deploy time with "ARN isn't valid"
+10. `addToResourcePolicy()` called on `Bucket.fromBucketName(stack, id, tokenName)` where `tokenName` is a CloudFormation token (SSM-resolved value) — this is a **silent no-op** in CDK; the bucket policy is never written and CloudFront OAC access will fail with 403
 
 ---
 
 ## Common Anti-Patterns for This Project
 
 Flag these immediately:
+
+**Pipeline / IAM:**
 
 | Anti-pattern | Risk | Fix |
 |---|---|---|
@@ -156,6 +160,16 @@ Flag these immediately:
 | CDK stack output via `CfnOutput` / `Fn.importValue()` | Tight cross-stack coupling, deploy ordering constraints | Use SSM Parameter Store |
 | Lambda env var holding a secret value (even a test key) | Secrets visible in Lambda console and logs | Read from Secrets Manager at cold start |
 | `--require-approval never` without a preceding manual approval gate in the job | Unreviewed prod deployments | Ensure `environment: prod` with required reviewers is the gate |
+
+**CDK / Infrastructure (confirmed deployment failures):**
+
+| Anti-pattern | Risk | Fix |
+|---|---|---|
+| `Bucket.fromBucketName(stack, id, ssmToken).addToResourcePolicy(...)` | CDK sets `autoCreatePolicy = false` for buckets imported with token-valued names — `addToResourcePolicy()` is a **silent no-op**; no `AWS::S3::BucketPolicy` resource is emitted | Add the policy in the stack that **owns** the `Bucket` construct, not in a stack that imports it by SSM token name |
+| `CfnWebACLAssociation` targeting an API Gateway HTTP API ARN (`/apis/{id}/stages/$default`) | WAF REGIONAL does not support HTTP API v2 — CloudFormation returns "ARN isn't valid" at deploy time | Remove WAF REGIONAL from `ApiStack`; use CLOUDFRONT-scope WAF in `CdnStack` for WAF protection; protect HTTP API v2 with Cognito JWT authorizer + stage throttling |
+| Reading Stripe publishable key from Secrets Manager | Publishable keys are not secrets — `bootstrap.sh` writes them to SSM Parameter Store (`/duseum/{env}/stripe/publishable_key`); Secrets Manager call returns `ResourceNotFoundException` | Use `aws ssm get-parameter` not `aws secretsmanager get-secret-value` for publishable keys |
+
+> **Authoritative list of CDK anti-patterns:** `CLAUDE.md` § "Common Mistakes — CDK / Infrastructure" is the primary source. This table covers only the confirmed deployment-failure patterns from production incidents. Keep the two lists in sync when adding new patterns.
 
 ---
 
