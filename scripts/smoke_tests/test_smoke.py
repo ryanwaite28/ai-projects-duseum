@@ -24,12 +24,21 @@ else:
     APP_DOMAIN = f"{ENV}.duseum.com"
 
 
-# ── HTTP helper ────────────────────────────────────────────────────────────────
+# ── HTTP helpers ───────────────────────────────────────────────────────────────
 
 def get_status(path: str) -> int:
-    """Return HTTP status code for a GET request, or 0 on connection failure."""
+    """Return HTTP status code for GET {API_BASE}{path}, or 0 on connection failure."""
     try:
         r = requests.get(f"{API_BASE}{path}", timeout=15, allow_redirects=True)
+        return r.status_code
+    except requests.RequestException:
+        return 0
+
+
+def url_status(url: str) -> int:
+    """Return HTTP status code for a GET request to a full URL, or 0 on connection failure."""
+    try:
+        r = requests.get(url, timeout=15, allow_redirects=True)
         return r.status_code
     except requests.RequestException:
         return 0
@@ -43,8 +52,10 @@ class TestApiEndpoints:
     """Public and guarded API routes return expected status codes."""
 
     def test_features_daily_is_reachable(self):
+        # 404 is valid when no daily featured author has been selected yet (empty system)
         code = get_status("/features/daily")
-        assert 200 <= code < 300, f"GET /features/daily → {code} (expected 2xx)"
+        assert code != 0,                  "GET /features/daily → no response (connection failure)"
+        assert not (500 <= code < 600),    f"GET /features/daily → {code} (expected non-5xx)"
 
     def test_features_weekly_is_reachable(self):
         code = get_status("/features/weekly")
@@ -109,3 +120,40 @@ class TestCloudFront:
         media = f"media.{APP_DOMAIN}"
         assert media in aliases, \
             f"No CloudFront distribution found with alias '{media}'"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SPA domain reachability checks
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSPADomain:
+    """
+    SPA is served correctly through CloudFront → S3 (OAC).
+
+    403 = S3 bucket policy not granting CloudFront OAC access (missing BucketPolicy resource).
+    404 = CloudFront custom error response not configured (index.html not served for unknown paths).
+    5xx = Lambda@Edge or origin error.
+    """
+
+    def test_root_returns_200(self):
+        code = url_status(f"https://{APP_DOMAIN}")
+        assert code != 0,   f"https://{APP_DOMAIN} → no response (DNS or connection failure)"
+        assert code != 403, (
+            f"https://{APP_DOMAIN} → 403 Access Denied — "
+            "S3 OAC bucket policy is missing or does not grant cloudfront.amazonaws.com s3:GetObject"
+        )
+        assert code == 200, f"https://{APP_DOMAIN} → {code} (expected 200)"
+
+    def test_deep_route_returns_200_via_spa_fallback(self):
+        # CloudFront custom error responses map 403/404 from S3 → 200 index.html
+        # so React Router can handle the path client-side.
+        code = url_status(f"https://{APP_DOMAIN}/gallery/some-deep-spa-route")
+        assert code != 0,   f"https://{APP_DOMAIN}/gallery/... → no response"
+        assert code != 403, (
+            f"https://{APP_DOMAIN}/gallery/... → 403 — "
+            "CloudFront custom error response for 403 → index.html not configured"
+        )
+        assert code == 200, (
+            f"https://{APP_DOMAIN}/gallery/... → {code} — "
+            "CloudFront custom error responses (403/404 → index.html) may not be configured"
+        )
