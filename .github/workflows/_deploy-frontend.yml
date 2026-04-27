@@ -1,0 +1,109 @@
+name: Deploy Frontend (reusable)
+
+# Builds the Vite SPA with env vars injected from SSM/Secrets Manager,
+# syncs built assets to the SPA S3 bucket, and invalidates CloudFront.
+#
+# Called after CDK deploy so all SSM outputs are guaranteed to exist.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: Target environment — dev or prod
+      sha:
+        required: true
+        type: string
+        description: Git SHA for cache-busting and traceability
+    secrets:
+      AWS_ROLE_ARN:
+        required: true
+        description: IAM role ARN to assume via OIDC (duseum-github-actions-deploy-{env})
+
+jobs:
+  deploy-frontend:
+    name: Deploy Frontend (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # ── Read config from SSM ───────────────────────────────────────────────
+      - name: Read SSM parameters
+        id: ssm
+        env:
+          ENV: ${{ inputs.environment }}
+        run: |
+          get() { aws ssm get-parameter --name "$1" --query Parameter.Value --output text; }
+
+          echo "user_pool_id=$(get /duseum/$ENV/stacks/auth/user_pool_id)"            >> "$GITHUB_OUTPUT"
+          echo "user_pool_client_id=$(get /duseum/$ENV/stacks/auth/user_pool_client_id)" >> "$GITHUB_OUTPUT"
+          echo "spa_bucket=$(get /duseum/$ENV/stacks/storage/spa_bucket_name)"        >> "$GITHUB_OUTPUT"
+          echo "cf_dist_id=$(get /duseum/$ENV/stacks/cdn/app_distribution_id)"        >> "$GITHUB_OUTPUT"
+
+      # ── Read Stripe publishable key from Secrets Manager ───────────────────
+      - name: Read Stripe publishable key
+        id: stripe
+        env:
+          ENV: ${{ inputs.environment }}
+        run: |
+          KEY=$(aws secretsmanager get-secret-value \
+            --secret-id "/duseum/$ENV/stripe/publishable_key" \
+            --query SecretString --output text)
+          echo "::add-mask::$KEY"
+          echo "publishable_key=$KEY" >> "$GITHUB_OUTPUT"
+
+      # ── Build SPA ──────────────────────────────────────────────────────────
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ inputs.environment == 'prod' && 'https://api.duseum.com' || format('https://api.{0}.duseum.com', inputs.environment) }}
+          VITE_COGNITO_USER_POOL_ID: ${{ steps.ssm.outputs.user_pool_id }}
+          VITE_COGNITO_CLIENT_ID: ${{ steps.ssm.outputs.user_pool_client_id }}
+          VITE_STRIPE_PUBLISHABLE_KEY: ${{ steps.stripe.outputs.publishable_key }}
+        run: npm run build
+
+      # ── Sync to S3 ─────────────────────────────────────────────────────────
+      - name: Sync assets to S3
+        env:
+          SPA_BUCKET: ${{ steps.ssm.outputs.spa_bucket }}
+        run: |
+          # Hashed assets (JS/CSS/fonts/images) — immutable, 1 year
+          aws s3 sync frontend/dist/ s3://$SPA_BUCKET/ \
+            --delete \
+            --exclude "*.html" \
+            --cache-control "public, max-age=31536000, immutable"
+
+          # HTML files — always revalidate
+          aws s3 sync frontend/dist/ s3://$SPA_BUCKET/ \
+            --exclude "*" \
+            --include "*.html" \
+            --cache-control "no-cache, no-store, must-revalidate"
+
+      # ── Invalidate CloudFront ──────────────────────────────────────────────
+      - name: Invalidate CloudFront distribution
+        env:
+          CF_DIST_ID: ${{ steps.ssm.outputs.cf_dist_id }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "$CF_DIST_ID" \
+            --paths "/*"

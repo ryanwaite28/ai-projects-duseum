@@ -24,6 +24,7 @@ jobs:
     uses: ./.github/workflows/_build-lambdas.yml
     with:
       sha: ${{ github.sha }}
+      env: prod
       environment: build
     secrets:
       AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_BUILD }}
@@ -41,10 +42,21 @@ jobs:
     secrets:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
 
+  # ── Build and deploy frontend SPA to S3 + CloudFront ────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend (prod)
+    needs: [deploy-prod]
+    uses: ./.github/workflows/_deploy-frontend.yml
+    with:
+      environment: prod
+      sha: ${{ github.sha }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+
   # ── Post-deploy smoke tests ───────────────────────────────────────────────────
   smoke-test:
     name: Smoke Test (prod)
-    needs: [deploy-prod]
+    needs: [deploy-frontend]
     runs-on: ubuntu-latest
     environment: prod
     permissions:

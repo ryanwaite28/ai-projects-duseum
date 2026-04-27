@@ -2,6 +2,13 @@
 // infrastructure/constructs/lambda-function.ts
 // Reusable DuseumLambdaFunction construct — Section 13.4 CDK conventions
 //
+// Code source: pre-built ZIP from the CI/CD artifact bucket.
+//   s3://duseum-cicd-artifacts/lambda/{sha}/{lambdaName}/function.zip
+//
+// The SHA is read from CDK context (--context sha=<git-sha>).
+// Both dev and prod reference the same artifact for the same SHA —
+// build-once, deploy-many (JS is architecture-agnostic).
+//
 // Defaults:
 //   - Runtime:       Node.js 20, ARM64
 //   - Tracing:       X-Ray active
@@ -9,28 +16,18 @@
 //   - Log retention: 14 days (dev) / 90 days (prod)
 //   - Memory:        256 MB
 //   - Timeout:       29 s (API GW max)
-//   - Bundling:      esbuild (minify + source map)
 // =============================================================================
 
 import * as cdk from 'aws-cdk-lib'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
-import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs'
 import * as logs from 'aws-cdk-lib/aws-logs'
+import * as s3 from 'aws-cdk-lib/aws-s3'
 import { Construct } from 'constructs'
 
 // ── Props ──────────────────────────────────────────────────────────────────────
 
 export interface DuseumLambdaFunctionProps {
-  /**
-   * Absolute or workspace-relative path to the Lambda entry file (.ts).
-   * Passed directly to NodejsFunction `entry`.
-   */
-  readonly entry: string
-
-  /** Export name of the Lambda handler. Defaults to `'handler'`. */
-  readonly handler?: string
-
   /** `'dev'` or `'prod'` — drives log retention and removal policy. */
   readonly envName: string
 
@@ -52,9 +49,6 @@ export interface DuseumLambdaFunctionProps {
   /** Human-readable description shown in the Lambda console. */
   readonly description?: string
 
-  /** Override or extend the default esbuild bundling options. */
-  readonly bundling?: lambdaNodejs.BundlingOptions
-
   /** Additional inline IAM policy statements attached to the Lambda role. */
   readonly initialPolicy?: iam.PolicyStatement[]
 }
@@ -63,7 +57,7 @@ export interface DuseumLambdaFunctionProps {
 
 export class DuseumLambdaFunction extends Construct {
   /** The underlying Lambda function — use for event sources, grants, etc. */
-  public readonly fn: lambdaNodejs.NodejsFunction
+  public readonly fn: lambda.Function
 
   /** Convenience reference to `fn.role` — always non-null for new functions. */
   public readonly role: iam.IRole
@@ -74,11 +68,17 @@ export class DuseumLambdaFunction extends Construct {
     const stack = cdk.Stack.of(this)
     const isProd = props.envName === 'prod'
 
+    // SHA from CDK context — forms the S3 artifact key.
+    // Passed by GitHub Actions via --context sha=<git-sha>.
+    // In CI synth (ci.yml) a placeholder SHA is passed to allow credential-free synth.
+    const sha = this.node.tryGetContext('sha') as string | undefined
+    if (!sha) throw new Error('Missing CDK context: sha — pass --context sha=<git-sha> to cdk deploy')
+
     const logRetention = isProd
       ? logs.RetentionDays.THREE_MONTHS   // 90 days
       : logs.RetentionDays.TWO_WEEKS      // 14 days
 
-    // Sanitise the construct id for use in the function name (lowercase, hyphens)
+    // Sanitise the construct id for use in the function name and S3 key
     const safeName = id.toLowerCase().replace(/[^a-z0-9-]/g, '-')
 
     // Explicit log group — avoids the deprecated `logRetention` prop
@@ -88,13 +88,26 @@ export class DuseumLambdaFunction extends Construct {
       removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     })
 
-    this.fn = new lambdaNodejs.NodejsFunction(this, 'Fn', {
+    // Pre-built artifact from the shared CI/CD bucket (created by bootstrap.sh).
+    // Using fromBucketName avoids a CDK lookup call — bucket is pre-provisioned.
+    const artifactBucket = s3.Bucket.fromBucketName(this, 'ArtifactBucket', 'duseum-cicd-artifacts')
+
+    // The S3 key includes the git SHA so CloudFormation detects code changes via
+    // key change — objectVersion is not needed. Ack is placed on `this` (parent of
+    // `Fn`) so the context traversal from Fn → DuseumLambdaFunction finds it.
+    cdk.Annotations.of(this).acknowledgeWarning(
+      '@aws-cdk/aws-lambda:codeFromBucketObjectVersionNotSpecified',
+      'S3 key contains git SHA — CF detects changes via key, not object version.',
+    )
+
+    this.fn = new lambda.Function(this, 'Fn', {
       functionName: `duseum-${props.envName}-lambda-${safeName}`,
       description: props.description,
 
       // ── Source ──────────────────────────────────────────────────────────────
-      entry: props.entry,
-      handler: props.handler ?? 'handler',
+      // Pre-built by _build-lambdas.yml; key is {env}/lambda/{sha}/{name}/function.zip.
+      code: lambda.Code.fromBucket(artifactBucket, `${props.envName}/lambda/${sha}/${safeName}/function.zip`),
+      handler: 'index.handler',
 
       // ── Runtime ─────────────────────────────────────────────────────────────
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -112,14 +125,6 @@ export class DuseumLambdaFunction extends Construct {
       timeout: props.timeout ?? cdk.Duration.seconds(29),
       reservedConcurrentExecutions: props.reservedConcurrentExecutions,
 
-      // ── Bundling ─────────────────────────────────────────────────────────────
-      bundling: {
-        minify: true,
-        sourceMap: true,
-        target: 'node20',
-        ...props.bundling,
-      },
-
       // ── Environment ──────────────────────────────────────────────────────────
       environment: {
         ENVIRONMENT: props.envName,
@@ -131,12 +136,13 @@ export class DuseumLambdaFunction extends Construct {
       initialPolicy: props.initialPolicy,
     })
 
+    // Lambda execution role needs s3:GetObject on the artifact bucket to load code.
+    artifactBucket.grantRead(this.fn)
+
     // role is always defined for newly-created functions
     this.role = this.fn.role!
 
     // ── Standard tags (Section 13.5) ─────────────────────────────────────────
-    // Tag the whole construct subtree so the log retention custom resource
-    // Lambda also picks up the tags.
     cdk.Tags.of(this).add('Project', 'duseum')
     cdk.Tags.of(this).add('Environment', props.envName)
     cdk.Tags.of(this).add('Stack', stack.stackName)
