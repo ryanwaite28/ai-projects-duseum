@@ -1,11 +1,10 @@
 // =============================================================================
 // infrastructure/stacks/api-stack.ts
-// ApiStack — HTTP API Gateway + all Lambda functions + WAF + SSM outputs
+// ApiStack — HTTP API Gateway + all Lambda functions + SSM outputs
 //
 // Resources owned by this stack (Section 5.2):
 //   - API Gateway v2 HTTP API
 //   - Cognito JWT authorizer
-//   - WAF WebACL (REGIONAL scope) attached to the API stage
 //   - All Lambda functions (Section 4.2)
 //   - SQS event source mappings for subscriptions-webhook + notifications
 //   - EventBridge targets for maintenance-lambda
@@ -25,7 +24,6 @@ import * as route53 from 'aws-cdk-lib/aws-route53'
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets'
 import * as sqs from 'aws-cdk-lib/aws-sqs'
 import * as ssm from 'aws-cdk-lib/aws-ssm'
-import * as wafv2 from 'aws-cdk-lib/aws-wafv2'
 import { Construct } from 'constructs'
 import { DuseumLambdaFunction } from '../constructs/lambda-function'
 
@@ -236,77 +234,6 @@ export class ApiStack extends cdk.Stack {
         ...(auth === 'JWT' ? { authorizerId: jwtAuthorizer.ref } : {}),
         target: cdk.Fn.join('/', ['integrations', integration.ref]),
       })
-
-    // =========================================================================
-    // WAF WebACL — REGIONAL scope (API Gateway)
-    // Section 7.5
-    // =========================================================================
-
-    const apiWaf = new wafv2.CfnWebACL(this, 'ApiWaf', {
-      name: `duseum-${envName}-waf-api`,
-      scope: 'REGIONAL',
-      defaultAction: { allow: {} },
-      visibilityConfig: {
-        cloudWatchMetricsEnabled: true,
-        metricName:               `duseum-${envName}-waf-api`,
-        sampledRequestsEnabled:   true,
-      },
-      rules: [
-        {
-          name: 'AWSManagedRulesCommonRuleSet',
-          priority: 1,
-          overrideAction: { none: {} },
-          visibilityConfig: { cloudWatchMetricsEnabled: true, metricName: 'CommonRuleSet', sampledRequestsEnabled: true },
-          statement: { managedRuleGroupStatement: { vendorName: 'AWS', name: 'AWSManagedRulesCommonRuleSet' } },
-        },
-        {
-          name: 'AWSManagedRulesKnownBadInputs',
-          priority: 2,
-          overrideAction: { none: {} },
-          visibilityConfig: { cloudWatchMetricsEnabled: true, metricName: 'KnownBadInputs', sampledRequestsEnabled: true },
-          statement: { managedRuleGroupStatement: { vendorName: 'AWS', name: 'AWSManagedRulesKnownBadInputsRuleSet' } },
-        },
-        {
-          // 1,000 req/5-min per IP for general API routes
-          name: 'ApiRateLimit',
-          priority: 3,
-          action: { block: {} },
-          visibilityConfig: { cloudWatchMetricsEnabled: true, metricName: 'ApiRateLimit', sampledRequestsEnabled: true },
-          statement: { rateBasedStatement: { limit: 1000, aggregateKeyType: 'IP' } },
-        },
-        {
-          // 30 req/5-min per IP on upload intent endpoint (§7.5 UploadRateLimit)
-          name: 'UploadRateLimit',
-          priority: 4,
-          action: { block: {} },
-          visibilityConfig: { cloudWatchMetricsEnabled: true, metricName: 'UploadRateLimit', sampledRequestsEnabled: true },
-          statement: {
-            rateBasedStatement: {
-              limit: 30,
-              aggregateKeyType: 'IP',
-              scopeDownStatement: {
-                byteMatchStatement: {
-                  searchString: '/media/upload-intent',
-                  fieldToMatch: { uriPath: {} },
-                  textTransformations: [{ priority: 0, type: 'NONE' }],
-                  positionalConstraint: 'STARTS_WITH',
-                },
-              },
-            },
-          },
-        },
-      ],
-    })
-
-    // Associate WAF with API Gateway $default stage
-    // HTTP API v2 ARN format uses /apis/ (not /restapis/ which is REST API v1)
-    new wafv2.CfnWebACLAssociation(this, 'ApiWafAssociation', {
-      resourceArn: cdk.Fn.sub(
-        'arn:aws:apigateway:${AWS::Region}::/apis/${ApiId}/stages/$default',
-        { ApiId: httpApi.ref }
-      ),
-      webAclArn: apiWaf.attrArn,
-    })
 
     // =========================================================================
     // media-lambda (Section 4.2, 5.6)
