@@ -13,13 +13,19 @@ set -e   # exit on any error
 echo "=== Creating DynamoDB tables ==="
 
 # Main table — all 6 GSIs from §4.7
+# GSI sort keys match storage-stack.ts exactly:
+#   GSI-AuthorPublic       → visibility#createdAt  (not SK)
+#   GSI-AllPublicPieces    → createdAt             (not SK)
+#   GSI-TagIndex           → createdAt             (not SK)
 aws dynamodb create-table \
   --table-name duseum-local \
   --attribute-definitions \
     AttributeName=PK,AttributeType=S \
     AttributeName=SK,AttributeType=S \
     AttributeName=authorId,AttributeType=S \
+    'AttributeName=visibility#createdAt,AttributeType=S' \
     AttributeName=status,AttributeType=S \
+    AttributeName=createdAt,AttributeType=S \
     AttributeName=tag,AttributeType=S \
     AttributeName=featureStatus,AttributeType=S \
     AttributeName=isoWeek,AttributeType=S \
@@ -31,20 +37,23 @@ aws dynamodb create-table \
   --billing-mode PAY_PER_REQUEST \
   --global-secondary-indexes \
     '[
-      {"IndexName":"GSI-AuthorPublic","KeySchema":[{"AttributeName":"authorId","KeyType":"HASH"},{"AttributeName":"SK","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}},
-      {"IndexName":"GSI-AllPublicPieces","KeySchema":[{"AttributeName":"status","KeyType":"HASH"},{"AttributeName":"SK","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}},
+      {"IndexName":"GSI-AuthorPublic","KeySchema":[{"AttributeName":"authorId","KeyType":"HASH"},{"AttributeName":"visibility#createdAt","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}},
+      {"IndexName":"GSI-AllPublicPieces","KeySchema":[{"AttributeName":"status","KeyType":"HASH"},{"AttributeName":"createdAt","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}},
       {"IndexName":"GSI-FollowersByAuthor","KeySchema":[{"AttributeName":"authorId","KeyType":"HASH"},{"AttributeName":"followedAt","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}},
       {"IndexName":"GSI-SubscribersByAuthor","KeySchema":[{"AttributeName":"authorId","KeyType":"HASH"},{"AttributeName":"subscribedAt","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}},
-      {"IndexName":"GSI-TagIndex","KeySchema":[{"AttributeName":"tag","KeyType":"HASH"},{"AttributeName":"SK","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}},
+      {"IndexName":"GSI-TagIndex","KeySchema":[{"AttributeName":"tag","KeyType":"HASH"},{"AttributeName":"createdAt","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}},
       {"IndexName":"GSI-WeeklyFeatureByStatus","KeySchema":[{"AttributeName":"featureStatus","KeyType":"HASH"},{"AttributeName":"isoWeek","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}}
     ]'
 
-# Idempotency table (TTL on 'ttl' field enables dedup expiry)
+# Idempotency table — TTL on 'ttl' attribute for dedup expiry
 aws dynamodb create-table \
   --table-name duseum-local-idempotency \
   --attribute-definitions AttributeName=PK,AttributeType=S \
   --key-schema AttributeName=PK,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST
+aws dynamodb update-time-to-live \
+  --table-name duseum-local-idempotency \
+  --time-to-live-specification 'Enabled=true,AttributeName=ttl'
 
 # Config table
 aws dynamodb create-table \
@@ -73,6 +82,12 @@ aws dynamodb put-item --table-name duseum-local-config \
   --item '{"PK":{"S":"WEEKLY_FEATURE_SLOT_COUNT"},"value":{"N":"10"}}'
 aws dynamodb put-item --table-name duseum-local-config \
   --item '{"PK":{"S":"WEEKLY_FEATURE_ADVANCE_WEEKS"},"value":{"N":"8"}}'
+aws dynamodb put-item --table-name duseum-local-config \
+  --item '{"PK":{"S":"ACTIVE_PLATFORM_SUB_COUNT"},"value":{"N":"0"}}'
+aws dynamodb put-item --table-name duseum-local-config \
+  --item '{"PK":{"S":"ACTIVE_AUTHOR_SUB_COUNT"},"value":{"N":"0"}}'
+aws dynamodb put-item --table-name duseum-local-config \
+  --item '{"PK":{"S":"PLATFORM_MRR_USD_CENTS"},"value":{"N":"0"}}'
 
 echo "=== Creating S3 buckets ==="
 
@@ -107,8 +122,11 @@ aws secretsmanager create-secret \
   --name duseum/local/ses/from-address \
   --secret-string no-reply@duseum.com
 aws secretsmanager create-secret \
+  --name duseum/local/stripe/connect-client-id \
+  --secret-string ca_REPLACE_WITH_YOUR_CONNECT_CLIENT_ID
+aws secretsmanager create-secret \
   --name duseum/local/notifications/unsubscribe-secret \
-  --secret-string local-dev-unsubscribe-hmac-secret
+  --secret-string local-dev-unsubscribe-hmac-secret-32chars
 
 echo "=== Verifying SES email identity ==="
 
