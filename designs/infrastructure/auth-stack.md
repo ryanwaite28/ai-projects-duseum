@@ -81,7 +81,7 @@ userPool.addTrigger(cognito.UserPoolOperation.POST_CONFIRMATION, triggerFn.fn)
 1. `AuthStack` instantiated with `envName` prop from `DuseumStage`.
 2. Cognito User Pool created with email sign-in, code-based email verification, optional TOTP MFA (no SMS), 8-char minimum password with all character classes.
 3. App Client created with no client secret, SRP auth flow only, authorization_code OAuth flow, 1-hour access+id tokens, 30-day refresh token.
-4. Callback URLs: `https://app.{env}.duseum.com/callback` (prod: `https://app.duseum.com/callback`) + `http://localhost:5173/callback` for local dev.
+4. Callback URLs: `https://{env}.duseum.com/callback` (prod: `https://duseum.com/callback`) + `http://localhost:5173/callback` for local dev.
 5. Main table name read from SSM (`valueForStringParameter` — resolves at deploy time as CloudFormation token).
 6. `mainTableRef = dynamodb.Table.fromTableName(...)` created for IAM grant only.
 7. `DuseumLambdaFunction` creates `auth-triggers-lambda` with `DYNAMODB_TABLE_NAME` env var and `reservedConcurrentExecutions: 10`.

@@ -319,7 +319,7 @@ Duseum is a fully serverless application on AWS. There is no always-on compute �
                                          │ HTTPS
                          ┌───────────────▼─────────────────┐
                          │      CloudFront (CDN + WAF)      │
-                         │  app.duseum.com (SPA assets)  │
+                         │  duseum.com (SPA assets)      │
                          │  api.duseum.com (API Gateway) │
                          │  media.duseum.com (images)    │
                          └──┬────────────┬────────────┬─────┘

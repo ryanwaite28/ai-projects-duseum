@@ -98,7 +98,7 @@ export class AuthStack extends cdk.Stack {
     // App Client (SPA — no client secret)
     // =========================================================================
 
-    const appDomain = envName === 'prod' ? 'https://app.duseum.com' : `https://app.${envName}.duseum.com`
+    const appDomain = envName === 'prod' ? 'https://duseum.com' : `https://${envName}.duseum.com`
 
     this.userPoolClient = new cognito.UserPoolClient(this, 'UserPoolClient', {
       userPool: this.userPool,
