@@ -1,26 +1,30 @@
-import { useState } from 'react'
-import { EyebrowLabel } from '../../components/ui/EyebrowLabel'
-import { PageLayout } from '../../components/layout/PageLayout'
-import { ProtectedRoute } from '../../components/layout/ProtectedRoute'
-import { useMe } from '../../hooks/use-me'
-import { OverviewTab }       from './tabs/overview-tab'
-import { PiecesTab }         from './tabs/pieces-tab'
-import { CollectionsTab }    from './tabs/collections-tab'
-import { PinnedTab }         from './tabs/pinned-tab'
-import { AnalyticsTab }      from './tabs/analytics-tab'
-import { FeatureHistoryTab } from './tabs/feature-history-tab'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useQueryClient, useMutation } from '@tanstack/react-query'
+import { connectStatusQueryKey } from '../../hooks/use-connect-status'
+import { EyebrowLabel }       from '../../components/ui/EyebrowLabel'
+import { PageLayout }         from '../../components/layout/PageLayout'
+import { ProtectedRoute }     from '../../components/layout/ProtectedRoute'
+import { useMe }              from '../../hooks/use-me'
+import { OverviewTab }        from './tabs/overview-tab'
+import { PiecesTab }          from './tabs/pieces-tab'
+import { CollectionsTab }     from './tabs/collections-tab'
+import { PinnedTab }          from './tabs/pinned-tab'
+import { AnalyticsTab }       from './tabs/analytics-tab'
+import { FeatureHistoryTab }  from './tabs/feature-history-tab'
+import { authorDashboardService } from '../../services/author-dashboard.service'
 
 // ── Tab config ────────────────────────────────────────────────────────────────
 
 type TabId = 'overview' | 'pieces' | 'collections' | 'pinned' | 'analytics' | 'features'
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'overview',     label: 'Overview'     },
-  { id: 'pieces',       label: 'My Pieces'    },
-  { id: 'collections',  label: 'Collections'  },
-  { id: 'pinned',       label: 'Pinned Pieces' },
-  { id: 'analytics',    label: 'Analytics'    },
-  { id: 'features',     label: 'Feature Slots' },
+  { id: 'overview',     label: 'Overview'      },
+  { id: 'pieces',       label: 'My Pieces'     },
+  { id: 'collections',  label: 'Collections'   },
+  { id: 'pinned',       label: 'Pinned Pieces'  },
+  { id: 'analytics',   label: 'Analytics'     },
+  { id: 'features',    label: 'Feature Slots'  },
 ]
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
@@ -47,11 +51,50 @@ function TabBar({ active, onChange }: { active: TabId; onChange: (id: TabId) => 
   )
 }
 
+// ── Connect redirect handler ──────────────────────────────────────────────────
+
+function useConnectRedirect() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const queryClient = useQueryClient()
+  const [connectToast, setConnectToast] = useState<'success' | 'refresh' | null>(null)
+
+  const onboardMutation = useMutation({
+    mutationFn: () => authorDashboardService.connectOnboard(),
+    onSuccess: (data) => {
+      window.location.href = (data as { accountLinkUrl: string }).accountLinkUrl
+    },
+  })
+
+  useEffect(() => {
+    const connect = searchParams.get('connect')
+    if (!connect) return
+
+    // Strip param immediately so a hard-refresh doesn't re-trigger
+    const next = new URLSearchParams(searchParams)
+    next.delete('connect')
+    setSearchParams(next, { replace: true })
+
+    if (connect === 'return') {
+      // Invalidate the connect status cache so the UI reflects the new state
+      queryClient.invalidateQueries({ queryKey: connectStatusQueryKey })
+      setConnectToast('success')
+      setTimeout(() => setConnectToast(null), 5000)
+    } else if (connect === 'refresh') {
+      // Onboarding link expired — automatically request a fresh one
+      setConnectToast('refresh')
+      onboardMutation.mutate()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return connectToast
+}
+
 // ── Page content ──────────────────────────────────────────────────────────────
 
 function AuthorDashboardContent() {
   const { data: me, isLoading } = useMe()
   const [activeTab, setActiveTab] = useState<TabId>('overview')
+  const connectToast = useConnectRedirect()
 
   if (isLoading) {
     return (
@@ -71,6 +114,16 @@ function AuthorDashboardContent() {
 
   return (
     <>
+      {connectToast === 'success' && (
+        <div className="mb-6 px-4 py-3 bg-[#5a9e6e]/15 border border-[#5a9e6e]/30 rounded-sm text-[0.82rem] font-body text-[#5a9e6e]">
+          Stripe account connected successfully. You can now enable Author subscriptions.
+        </div>
+      )}
+      {connectToast === 'refresh' && (
+        <div className="mb-6 px-4 py-3 bg-gold/10 border border-gold/25 rounded-sm text-[0.82rem] font-body text-parchment-dim">
+          Your Stripe onboarding link expired. Redirecting you back to Stripe…
+        </div>
+      )}
       <TabBar active={activeTab} onChange={setActiveTab} />
       {activeTab === 'overview'    && <OverviewTab />}
       {activeTab === 'pieces'      && <PiecesTab />}

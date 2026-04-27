@@ -14,8 +14,10 @@ import {
   CreateTableCommand,
   DeleteTableCommand,
   DynamoDBClient,
+  ResourceInUseException,
 } from '@aws-sdk/client-dynamodb'
 import {
+  BucketAlreadyOwnedByYou,
   CreateBucketCommand,
   DeleteBucketCommand,
   S3Client,
@@ -29,8 +31,8 @@ import { handler } from './upload-intent.js'
 
 const ENDPOINT = 'http://localhost:4566'
 const REGION   = 'us-east-1'
-const TABLE    = 'duseum-test-main'
-const BUCKET   = 'duseum-test-media'
+const TABLE    = process.env['DYNAMODB_TABLE_NAME'] ?? 'duseum-test-media'
+const BUCKET   = process.env['S3_MEDIA_BUCKET_NAME'] ?? 'duseum-test-media-uploads'
 
 const dynamo = new DynamoDBClient({
   region: REGION,
@@ -91,33 +93,30 @@ const putItem = (item: Record<string, unknown>) =>
 // ── Suite setup/teardown ──────────────────────────────────────────────────────
 
 beforeAll(async () => {
-  // Set env vars required by handler and shared modules
-  process.env.ENVIRONMENT           = 'local'
-  process.env.AWS_REGION            = REGION
-  process.env.AWS_ENDPOINT_URL      = ENDPOINT
-  process.env.DYNAMODB_TABLE_NAME   = TABLE
-  process.env.IDEMPOTENCY_TABLE_NAME = 'unused'
-  process.env.CONFIG_TABLE_NAME      = 'unused'
-  process.env.S3_MEDIA_BUCKET_NAME  = BUCKET
-  process.env.COGNITO_USER_POOL_ID  = 'us-east-1_testpool'
-  process.env.COGNITO_CLIENT_ID     = 'test-client-id'
+  // Create DynamoDB test table — table name comes from vitest.config.ts env
+  try {
+    await dynamo.send(new CreateTableCommand({
+      TableName: TABLE,
+      KeySchema: [
+        { AttributeName: 'PK', KeyType: 'HASH' },
+        { AttributeName: 'SK', KeyType: 'RANGE' },
+      ],
+      AttributeDefinitions: [
+        { AttributeName: 'PK', AttributeType: 'S' },
+        { AttributeName: 'SK', AttributeType: 'S' },
+      ],
+      BillingMode: 'PAY_PER_REQUEST',
+    }))
+  } catch (err) {
+    if (!(err instanceof ResourceInUseException)) throw err
+  }
 
-  // Create DynamoDB test table
-  await dynamo.send(new CreateTableCommand({
-    TableName: TABLE,
-    KeySchema: [
-      { AttributeName: 'PK', KeyType: 'HASH' },
-      { AttributeName: 'SK', KeyType: 'RANGE' },
-    ],
-    AttributeDefinitions: [
-      { AttributeName: 'PK', AttributeType: 'S' },
-      { AttributeName: 'SK', AttributeType: 'S' },
-    ],
-    BillingMode: 'PAY_PER_REQUEST',
-  }))
-
-  // Create S3 test bucket
-  await s3.send(new CreateBucketCommand({ Bucket: BUCKET }))
+  // Create S3 test bucket — handle already-exists from previous run
+  try {
+    await s3.send(new CreateBucketCommand({ Bucket: BUCKET }))
+  } catch (err) {
+    if (!(err instanceof BucketAlreadyOwnedByYou)) throw err
+  }
 
   // Seed test profiles
   await putItem({
@@ -174,16 +173,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await dynamo.send(new DeleteTableCommand({ TableName: TABLE })).catch(() => {})
   await s3.send(new DeleteBucketCommand({ Bucket: BUCKET })).catch(() => {})
-
-  delete process.env.ENVIRONMENT
-  delete process.env.AWS_REGION
-  delete process.env.AWS_ENDPOINT_URL
-  delete process.env.DYNAMODB_TABLE_NAME
-  delete process.env.IDEMPOTENCY_TABLE_NAME
-  delete process.env.CONFIG_TABLE_NAME
-  delete process.env.S3_MEDIA_BUCKET_NAME
-  delete process.env.COGNITO_USER_POOL_ID
-  delete process.env.COGNITO_CLIENT_ID
 })
 
 afterEach(() => {

@@ -22,6 +22,9 @@ cdk.context.json
 .DS_Store
 Thumbs.db
 
+# ── Fetched upstream READMEs (go stale; read from source instead) ─────────────
+MINISTACK.md
+
 # ── IDE ───────────────────────────────────────────────────────────────────────
 .vscode/settings.json
 .idea/
@@ -35,6 +38,3 @@ coverage/
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
 npm-debug.log*
-
-
-.claude/settings.local.json

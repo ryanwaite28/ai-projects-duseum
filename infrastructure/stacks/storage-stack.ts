@@ -13,6 +13,7 @@
 
 import * as cdk from 'aws-cdk-lib'
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
+import * as iam from 'aws-cdk-lib/aws-iam'
 import * as s3 from 'aws-cdk-lib/aws-s3'
 import * as ssm from 'aws-cdk-lib/aws-ssm'
 import { Construct } from 'constructs'
@@ -78,6 +79,21 @@ export class StorageStack extends cdk.Stack {
     })
 
     // =========================================================================
+    // S3 — Media Bucket: CloudFront OAC allow
+    // AWS:SourceAccount scopes access to this account's CF distributions only.
+    // Specific distribution ARN is unknown here (CdnStack deploys after).
+    // =========================================================================
+
+    this.mediaBucket.addToResourcePolicy(new iam.PolicyStatement({
+      sid:        'AllowCloudFrontOACMedia',
+      effect:     iam.Effect.ALLOW,
+      principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
+      actions:    ['s3:GetObject'],
+      resources:  [this.mediaBucket.arnForObjects('*')],
+      conditions: { StringEquals: { 'AWS:SourceAccount': this.account } },
+    }))
+
+    // =========================================================================
     // S3 — SPA Bucket (static website hosting; CloudFront OAC in CdnStack)
     // =========================================================================
 
@@ -90,6 +106,16 @@ export class StorageStack extends cdk.Stack {
       removalPolicy,
       autoDeleteObjects: !isProd,
     })
+
+    // CloudFront OAC allow (same account scope — see media bucket comment above)
+    this.spaBucket.addToResourcePolicy(new iam.PolicyStatement({
+      sid:        'AllowCloudFrontOACSpa',
+      effect:     iam.Effect.ALLOW,
+      principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
+      actions:    ['s3:GetObject'],
+      resources:  [this.spaBucket.arnForObjects('*')],
+      conditions: { StringEquals: { 'AWS:SourceAccount': this.account } },
+    }))
 
     // =========================================================================
     // DynamoDB — Main Table  (single-table design, §4.7)

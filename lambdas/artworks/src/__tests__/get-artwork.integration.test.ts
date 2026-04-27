@@ -188,22 +188,9 @@ describe('GET /artworks/{artworkId}', () => {
       userId:         AUTHOR_SUB_VIEWER,
       pathParameters: { artworkId: 'art-001' },
     })
-    // generateSignedUrl will fail without a real private key in test;
-    // we patch secrets to return a test PEM (RSA-2048 throwaway key)
-    const { default: crypto } = await import('node:crypto')
-    const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 })
-    const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string
-    process.env.__TEST_CLOUDFRONT_PRIVATE_KEY__ = pem
-
-    // Patch getCloudfrontPrivateKey to return the test key
-    const secretsModule = await import('@duseum/shared')
-    const original = secretsModule.getCloudfrontPrivateKey
-    ;(secretsModule as Record<string, unknown>)['getCloudfrontPrivateKey'] = async () => pem
-
+    // getCloudfrontPrivateKey reads __TEST_CLOUDFRONT_PRIVATE_KEY__ env var
+    // (set in setup.ts beforeAll) so no Secrets Manager call is needed here.
     const res  = await handler(event as never, makeCtx())
-
-    // Restore
-    ;(secretsModule as Record<string, unknown>)['getCloudfrontPrivateKey'] = original
 
     expect(res.statusCode).toBe(200)
     const body = JSON.parse(res.body!)

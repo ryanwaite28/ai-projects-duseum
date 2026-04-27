@@ -39,6 +39,7 @@ import {
   handlePaymentIntentFailed,
   handlePaymentIntentSucceeded,
 } from './handlers/payment-intent-events.js'
+import { handleAccountUpdated } from './handlers/account-events.js'
 
 const logger = new Logger({ serviceName: 'subscriptions-webhook-lambda' })
 
@@ -119,6 +120,10 @@ export const handler = async (sqsEvent: SQSEvent): Promise<SQSBatchResponse> => 
           break
         case 'payment_intent.payment_failed':
           await handlePaymentIntentFailed(docClient, obj as never)
+          break
+        case 'account.updated':
+          // event.account is the Connect account ID; data.object is Stripe.Account
+          await handleAccountUpdated(docClient, event.account ?? '', event.data.object as never)
           break
         // ── Graceful no-ops ──────────────────────────────────────────────────
         case 'customer.subscription.trial_will_end':

@@ -17,7 +17,6 @@
 import 'source-map-support/register'
 import * as cdk from 'aws-cdk-lib'
 import { DuseumStage } from '../constructs/duseum-stage'
-import { OidcStack } from '../stacks/oidc-stack'
 
 const app = new cdk.App()
 
@@ -47,10 +46,9 @@ const awsEnv: cdk.Environment = {
   region: 'us-east-1',
 }
 
-// ── OidcStack — deployed once manually; env-agnostic (creates both roles) ─────
-// Deploy: cd infrastructure && npx cdk deploy OidcStack --context env=dev --profile rmw-llc
-
-new OidcStack(app, 'OidcStack', { env: awsEnv })
+// NOTE: OIDC provider + IAM deploy/build roles are NOT managed by CDK.
+// They are pre-provisioned by scripts/bootstrap.sh (Sections 5 + 6) and must
+// exist before CDK can run — CDK needs the deploy role to deploy (chicken-and-egg).
 
 // ── Application stage ─────────────────────────────────────────────────────────
 

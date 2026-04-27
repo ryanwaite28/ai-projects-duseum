@@ -1,11 +1,13 @@
 name: Build Lambdas (reusable)
 
-# Builds all Lambda functions with esbuild (tree-shaken, bundled, minified,
-# node20 target) and uploads ZIPs to the S3 artifact bucket at:
-#   s3://duseum-dev-lambda-artifacts/{sha}/{name}/function.zip
+# Builds all Lambda functions with esbuild and uploads ZIPs to the shared
+# CI/CD artifact bucket at:
+#   s3://duseum-cicd-artifacts/{env}/lambda/{sha}/{name}/function.zip
 #
-# Prerequisite: S3 bucket duseum-dev-lambda-artifacts must exist in account
-# 408141212087 (created once manually or via bootstrap script).
+# Each environment (dev/prod) uploads under its own prefix — isolated, no
+# shared state between pipelines. env and sha together form a unique key.
+#
+# Prerequisite: s3://duseum-cicd-artifacts must exist (created by bootstrap.sh).
 
 on:
   workflow_call:
@@ -13,7 +15,15 @@ on:
       sha:
         required: true
         type: string
-        description: Git SHA used as the S3 prefix for this build
+        description: Git SHA used as the S3 key for this build
+      env:
+        required: true
+        type: string
+        description: Target deployment environment (dev or prod) — used as S3 prefix
+      environment:
+        required: true
+        type: string
+        description: GitHub Environment for OIDC sub claim (pass 'build')
     outputs:
       artifact-bucket:
         description: S3 bucket where ZIPs were uploaded
@@ -21,12 +31,16 @@ on:
     secrets:
       AWS_ROLE_ARN_BUILD:
         required: true
-        description: IAM role ARN for S3 upload (deploy-dev role has s3:PutObject on artifact bucket)
+        description: ARN of duseum-github-actions-build — least-privilege role for duseum-cicd-artifacts
 
 jobs:
   build:
     name: Build & Upload Lambda ZIPs
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
     outputs:
       artifact-bucket: ${{ steps.upload.outputs.bucket }}
 
@@ -40,41 +54,58 @@ jobs:
 
       - run: npm ci
 
-      # Bundle each Lambda entry point with esbuild into a single JS file,
-      # then zip it. External @aws-sdk/* is provided by the Lambda runtime.
-      - name: Bundle lambdas with esbuild
-        run: |
-          LAMBDAS="admin artworks auth-triggers features maintenance media notifications social subscriptions subscriptions-webhook users"
-          for NAME in $LAMBDAS; do
-            echo "=== Bundling $NAME ==="
-            mkdir -p dist/lambdas/$NAME
-            npx esbuild lambdas/$NAME/src/index.ts \
-              --bundle \
-              --minify \
-              --platform=node \
-              --target=node20 \
-              --external:@aws-sdk/* \
-              --outfile=dist/lambdas/$NAME/index.js
-            (cd dist/lambdas/$NAME && zip -j function.zip index.js)
-            echo "Built dist/lambdas/$NAME/function.zip ($(du -sh dist/lambdas/$NAME/function.zip | cut -f1))"
-          done
-
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_BUILD }}
           aws-region: us-east-1
 
+      # ── Bundle with esbuild ────────────────────────────────────────────────
+      # Each Lambda entry point → single minified index.js + linked source map.
+      # External @aws-sdk/* is provided by the Lambda runtime — not bundled.
+      - name: Bundle lambdas with esbuild
+        run: |
+          bundle() {
+            local NAME=$1
+            local ENTRY=$2
+            echo "=== Bundling $NAME ==="
+            mkdir -p dist/lambdas/$NAME
+            npx esbuild "$ENTRY" \
+              --bundle \
+              --minify \
+              --sourcemap \
+              --platform=node \
+              --target=node20 \
+              --external:@aws-sdk/* \
+              --outfile=dist/lambdas/$NAME/index.js
+            (cd dist/lambdas/$NAME && zip -j function.zip index.js index.js.map)
+            echo "  $(du -sh dist/lambdas/$NAME/function.zip | cut -f1)"
+          }
+
+          # Standard lambdas — entry is lambdas/{name}/src/index.ts
+          for NAME in admin artworks auth-triggers features maintenance media \
+                      notifications social subscriptions subscriptions-webhook users; do
+            bundle "$NAME" "lambdas/$NAME/src/index.ts"
+          done
+
+          # stripe-ingress — separate entry point within the subscriptions-webhook package
+          bundle "stripe-ingress" "lambdas/subscriptions-webhook/src/ingress.ts"
+
+      # ── Upload to S3 ──────────────────────────────────────────────────────
       - name: Upload ZIPs to S3
         id: upload
         run: |
-          BUCKET="duseum-dev-lambda-artifacts"
+          BUCKET="duseum-cicd-artifacts"
+          ENV="${{ inputs.env }}"
           SHA="${{ inputs.sha }}"
-          LAMBDAS="admin artworks auth-triggers features maintenance media notifications social subscriptions subscriptions-webhook users"
-          for NAME in $LAMBDAS; do
+
+          for NAME in admin artworks auth-triggers features maintenance media \
+                      notifications social subscriptions subscriptions-webhook users \
+                      stripe-ingress; do
             aws s3 cp dist/lambdas/$NAME/function.zip \
-              s3://$BUCKET/$SHA/$NAME/function.zip \
+              s3://$BUCKET/$ENV/lambda/$SHA/$NAME/function.zip \
               --region us-east-1
-            echo "Uploaded s3://$BUCKET/$SHA/$NAME/function.zip"
+            echo "Uploaded s3://$BUCKET/$ENV/lambda/$SHA/$NAME/function.zip"
           done
+
           echo "bucket=$BUCKET" >> $GITHUB_OUTPUT

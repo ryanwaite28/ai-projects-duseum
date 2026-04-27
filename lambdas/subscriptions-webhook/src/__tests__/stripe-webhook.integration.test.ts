@@ -18,9 +18,13 @@ import {
 } from './setup.js'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
-// Must be declared before any import of the handler, because vi.mock hoists.
+// vi.mock is hoisted to the top of the file by Vitest before any imports run.
+// Values used inside the factory must be declared with vi.hoisted() to avoid
+// the temporal dead zone (TDZ) — a plain const would not yet be initialised.
 
-const WEBHOOK_SECRET = 'whsec_test_secret'
+const { WEBHOOK_SECRET } = vi.hoisted(() => ({
+  WEBHOOK_SECRET: 'whsec_test_secret',
+}))
 
 vi.mock('@duseum/shared', async (importOriginal) => {
   const real = await importOriginal<typeof import('@duseum/shared')>()
@@ -102,7 +106,7 @@ describe('subscriptions-webhook handler', () => {
     const result = await handler(makeSqsEvent(raw) as never)
 
     expect(result.batchItemFailures).toHaveLength(0)
-    const item = await getItem(MAIN_TABLE, { PK: 'SUB#user-001', SK: 'TARGET#PLATFORM' })
+    const item = await getItem(MAIN_TABLE, { PK: 'USER#user-001', SK: 'SUB#PLATFORM' })
     expect(item).not.toBeNull()
     expect(item?.status).toBe('ACTIVE')
   })
@@ -111,7 +115,7 @@ describe('subscriptions-webhook handler', () => {
     const raw = makeStripeEvent('evt_002', 'customer.subscription.updated', makeSub({ status: 'past_due' }))
     await handler(makeSqsEvent(raw) as never)
 
-    const item = await getItem(MAIN_TABLE, { PK: 'SUB#user-001', SK: 'TARGET#PLATFORM' })
+    const item = await getItem(MAIN_TABLE, { PK: 'USER#user-001', SK: 'SUB#PLATFORM' })
     expect(item?.status).toBe('PAST_DUE')
   })
 
@@ -119,7 +123,7 @@ describe('subscriptions-webhook handler', () => {
     const raw = makeStripeEvent('evt_003', 'customer.subscription.deleted', makeSub({ status: 'canceled' }))
     await handler(makeSqsEvent(raw) as never)
 
-    const item = await getItem(MAIN_TABLE, { PK: 'SUB#user-001', SK: 'TARGET#PLATFORM' })
+    const item = await getItem(MAIN_TABLE, { PK: 'USER#user-001', SK: 'SUB#PLATFORM' })
     expect(item?.status).toBe('CANCELLED')
   })
 
@@ -127,7 +131,7 @@ describe('subscriptions-webhook handler', () => {
     const raw = makeStripeEvent('evt_004', 'customer.subscription.paused', makeSub({ status: 'paused' }))
     await handler(makeSqsEvent(raw) as never)
 
-    const item = await getItem(MAIN_TABLE, { PK: 'SUB#user-001', SK: 'TARGET#PLATFORM' })
+    const item = await getItem(MAIN_TABLE, { PK: 'USER#user-001', SK: 'SUB#PLATFORM' })
     expect(item?.status).toBe('PAUSED')
   })
 
@@ -135,7 +139,7 @@ describe('subscriptions-webhook handler', () => {
     const raw = makeStripeEvent('evt_005', 'customer.subscription.resumed', makeSub({ status: 'active' }))
     await handler(makeSqsEvent(raw) as never)
 
-    const item = await getItem(MAIN_TABLE, { PK: 'SUB#user-001', SK: 'TARGET#PLATFORM' })
+    const item = await getItem(MAIN_TABLE, { PK: 'USER#user-001', SK: 'SUB#PLATFORM' })
     expect(item?.status).toBe('ACTIVE')
   })
 
@@ -145,7 +149,7 @@ describe('subscriptions-webhook handler', () => {
     const raw = makeStripeEvent('evt_006', 'invoice.payment_failed', makeInvoice())
     await handler(makeSqsEvent(raw) as never)
 
-    const item = await getItem(MAIN_TABLE, { PK: 'SUB#user-001', SK: 'TARGET#PLATFORM' })
+    const item = await getItem(MAIN_TABLE, { PK: 'USER#user-001', SK: 'SUB#PLATFORM' })
     expect(item?.status).toBe('PAST_DUE')
   })
 
@@ -237,7 +241,7 @@ describe('subscriptions-webhook handler', () => {
 
     expect(result.batchItemFailures).toHaveLength(0)
     // No subscription should have been written (handler never ran)
-    const item = await getItem(MAIN_TABLE, { PK: 'SUB#user-001', SK: 'TARGET#PLATFORM' })
+    const item = await getItem(MAIN_TABLE, { PK: 'USER#user-001', SK: 'SUB#PLATFORM' })
     expect(item).toBeNull()
   })
 
@@ -282,5 +286,49 @@ describe('subscriptions-webhook handler', () => {
     }
     const result = await handler(event as never)
     expect(result.batchItemFailures).toHaveLength(1)
+  })
+
+  // ── account.updated (Stripe Connect) ─────────────────────────────────────
+
+  it('account.updated → caches connectChargesEnabled on Author profile (FR-SUB-13)', async () => {
+    const connectAccountId = 'acct_connect_test'
+    const userId = 'user-connect-001'
+
+    // Seed the reverse-lookup record (written by connect-onboard)
+    await seedItem(MAIN_TABLE, {
+      PK:        `CONNECT#${connectAccountId}`,
+      SK:        'META',
+      userId,
+      createdAt: '2026-04-23T00:00:00.000Z',
+    })
+    // Seed a minimal Author profile
+    await seedItem(MAIN_TABLE, {
+      PK:           `USER#${userId}`,
+      SK:           'PROFILE#AUTHOR',
+      userId,
+      profileType:  'AUTHOR',
+      displayName:  'Test Author',
+    })
+
+    const accountObj = { id: connectAccountId, charges_enabled: true, details_submitted: true }
+    const raw = makeStripeEvent('evt_acct_001', 'account.updated', accountObj, connectAccountId)
+    const result = await handler(makeSqsEvent(raw) as never)
+
+    expect(result.batchItemFailures).toHaveLength(0)
+    const profile = await getItem(MAIN_TABLE, { PK: `USER#${userId}`, SK: 'PROFILE#AUTHOR' })
+    expect(profile?.connectChargesEnabled).toBe(true)
+    const idem = await getItem(IDEM_TABLE, { PK: 'STRIPE#evt_acct_001' })
+    expect(idem).not.toBeNull()
+  })
+
+  it('account.updated for unknown Connect account → graceful skip, no failure', async () => {
+    const accountObj = { id: 'acct_unknown', charges_enabled: true }
+    const raw = makeStripeEvent('evt_acct_002', 'account.updated', accountObj, 'acct_unknown')
+    const result = await handler(makeSqsEvent(raw) as never)
+
+    // No lookup record exists — handler should log warn and continue
+    expect(result.batchItemFailures).toHaveLength(0)
+    const idem = await getItem(IDEM_TABLE, { PK: 'STRIPE#evt_acct_002' })
+    expect(idem).not.toBeNull()
   })
 })

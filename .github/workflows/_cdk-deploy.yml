@@ -49,7 +49,7 @@ jobs:
       - name: CDK deploy all stacks
         working-directory: infrastructure
         run: |
-          npx cdk deploy --all \
+          npx cdk deploy "duseum-${{ inputs.environment }}/**" \
             --context env=${{ inputs.environment }} \
             --context sha=${{ inputs.sha }} \
             --require-approval never \

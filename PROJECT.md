@@ -175,6 +175,9 @@ To give artists a beautiful, museum-quality space to share their work — and to
 - **FR-SUB-08**: Authors can view subscription analytics: active subscriber count, monthly recurring revenue (MRR), churn rate
 - **FR-SUB-09**: Viewers can manage their subscriptions (cancel, update payment method) via a self-service portal (Stripe Billing Portal)
 - **FR-SUB-10**: Free-tier limits (pieces per Author visible to free viewers) are configurable by Admins without a code deploy (stored in SSM Parameter Store)
+- **FR-SUB-11**: After completing Stripe Connect Express onboarding, the Author is redirected to `/dashboard/author?connect=return`. The frontend must detect this query param, display a success notification, and invalidate the connect-status cache so the UI immediately reflects `chargesEnabled: true` without a page reload.
+- **FR-SUB-12**: If the Stripe Connect onboarding link expires before the Author completes onboarding, Stripe redirects to `/dashboard/author?connect=refresh`. The frontend must detect this param, automatically call `POST /subscriptions/connect/onboard` to obtain a fresh link, and redirect the Author back to Stripe without requiring manual interaction.
+- **FR-SUB-13**: Stripe fires `account.updated` on the platform webhook when a connected Express account's `charges_enabled` or `payouts_enabled` state changes. The `subscriptions-webhook-lambda` must handle this event by updating the Author's DynamoDB record with the current `connectChargesEnabled` boolean, so that `GET /subscriptions/connect/status` can read from DynamoDB first and only fall back to a live Stripe API call when the cached value is absent.
 
 ### 2.8 Discovery & Browse
 
@@ -278,7 +281,7 @@ To give artists a beautiful, museum-quality space to share their work — and to
 - **NFR-SEC-03**: Stripe webhook signatures verified on every inbound webhook event
 - **NFR-SEC-04**: S3 bucket for media is not publicly accessible; all reads go through CloudFront with signed URLs for private content
 - **NFR-SEC-05**: All secrets (Stripe keys, DB credentials, JWT config) stored in AWS Secrets Manager; never in environment variables or code
-- **NFR-SEC-06**: WAF on CloudFront and API Gateway: rate limiting, common exploit rules, geo restrictions (if needed)
+- **NFR-SEC-06**: WAF (CLOUDFRONT scope) on CloudFront distributions: rate limiting, OWASP common rules, known-bad-inputs rules. API Gateway HTTP API v2 is not supported by WAF REGIONAL; it is protected by Cognito JWT authorizer + stage-level throttling.
 - **NFR-SEC-07**: Private art pieces served via CloudFront signed URLs (TTL: 1 hour); URL signing happens in Lambda, not frontend
 
 ### 3.4 Reliability
@@ -316,7 +319,7 @@ Duseum is a fully serverless application on AWS. There is no always-on compute �
                                          │ HTTPS
                          ┌───────────────▼─────────────────┐
                          │      CloudFront (CDN + WAF)      │
-                         │  app.duseum.com (SPA assets)  │
+                         │  duseum.com (SPA assets)      │
                          │  api.duseum.com (API Gateway) │
                          │  media.duseum.com (images)    │
                          └──┬────────────┬────────────┬─────┘
@@ -536,6 +539,7 @@ Duseum uses a **single-table design** pattern with a main `duseum-{env}` table p
 | Weekly Feature Booking | `FEATURE#WEEK#{isoWeek}` | `AUTHOR#{authorId}` | One booking per Author per week slot; `isoWeek` = `YYYY-Www` (e.g. `2025-W32`) |
 | Weekly Feature by Author | `AUTHOR#{authorId}` | `FEATURE#WEEK#{isoWeek}` | Query all bookings by Author (eligibility check, history) |
 | Daily Feature Log | `FEATURE#DAILY` | `DATE#{isoDate}` | Log of daily featured Author selections; SK sorted by date for last-7 exclusion window |
+| Stripe Connect Lookup | `CONNECT#{stripeConnectAccountId}` | `META` | Reverse-lookup record: maps a Stripe Connect account ID → `userId`; written by `POST /subscriptions/connect/onboard` when the Connect account is first created; read by the `account.updated` webhook handler (FR-SUB-13) |
 
 **GSIs:**
 
@@ -588,11 +592,11 @@ All infrastructure is managed by AWS CDK (TypeScript) inside `infrastructure/` i
 | Stack | Type | CDK Source | Resources |
 |---|---|---|---|
 | `NetworkStack` | Infrastructure | `stacks/network` | VPC (optional — most serverless resources don't need it), NAT GW (only if VPC needed for RDS/ElastiCache in future) |
-| `StorageStack` | Infrastructure | `stacks/storage` | S3 media bucket (private), S3 SPA bucket (public website), DynamoDB tables (main, idempotency, config) |
+| `StorageStack` | Infrastructure | `stacks/storage` | S3 media bucket (private), S3 SPA bucket (public website), DynamoDB tables (main, idempotency, config), S3 bucket policies granting CloudFront OAC (`cloudfront.amazonaws.com`) `s3:GetObject` access (scoped to `AWS:SourceAccount`) |
 | `AuthStack` | Infrastructure | `stacks/auth` | Cognito User Pool, User Pool Client, Google OAuth federation, Post-Confirmation Lambda trigger |
 | `CdnStack` | Infrastructure | `stacks/cdn` | CloudFront distribution for SPA, CloudFront distribution for media (with signed URL OAC), ACM certificate, Route53 records |
 | `MessagingStack` | Infrastructure | `stacks/messaging` | SQS queue (Stripe webhooks), SQS DLQ, SQS queue (new-piece notifications), SQS DLQ (notifications), EventBridge rule: daily featured author selection (`cron(0 0 * * ? *)`), EventBridge rule: weekly feature rotation (`cron(0 0 ? * MON *)`), SNS admin alerts topic |
-| `ApiStack` | Application | `stacks/api` | API Gateway HTTP API, Lambda functions (all 8), Lambda IAM roles, API GW → Lambda integrations, Cognito authorizer, WAF WebACL |
+| `ApiStack` | Application | `stacks/api` | API Gateway HTTP API, Lambda functions (all 8), Lambda IAM roles, API GW → Lambda integrations, Cognito authorizer |
 | `MonitoringStack` | Observability | `stacks/monitoring` | CloudWatch dashboards, alarms (Lambda errors, DLQ depth, API 5xx), X-Ray groups |
 
 ### 5.3 Stack Dependency Graph & Provisioning Order
@@ -1683,15 +1687,24 @@ Stripe webhook events are verified using `stripe.webhooks.constructEvent()` with
 
 ### 7.5 WAF Rules
 
-WAF WebACL attached to API Gateway and CloudFront:
+**CLOUDFRONT scope only.** WAF REGIONAL is **not** associated with the API Gateway HTTP API — AWS WAF REGIONAL does not support HTTP API v2 (`/apis/{id}/stages/$default` ARN format is rejected by `CfnWebACLAssociation`). WAF REGIONAL only works with API Gateway REST APIs.
+
+The `CfnWebACL` (scope: `CLOUDFRONT`) lives in `CdnStack` and is attached to both CloudFront distributions (SPA and media). HTTP API v2 protection is provided by the Cognito JWT authorizer and API Gateway stage-level throttling.
+
+**CloudFront WAF rules (CdnStack):**
 
 | Rule | Purpose |
 |---|---|
 | `AWSManagedRulesCommonRuleSet` | OWASP Top 10 protection |
 | `AWSManagedRulesKnownBadInputsRuleSet` | Known malicious payloads |
-| `RateLimitRule` | 1,000 requests/5-min per IP on `/api/*` |
-| `UploadRateLimit` | 30 requests/hour per IP on `/media/upload-intent` |
-| `WebhookAllowList` | Only Stripe IP ranges allowed on `/webhooks/*` |
+| `CloudFrontRateLimit` | Block IPs exceeding 1,000 requests/5-min |
+
+**API Gateway HTTP API protections (ApiStack):**
+
+| Protection | Mechanism |
+|---|---|
+| Authentication | Cognito JWT authorizer on all non-public routes |
+| Rate limiting | API Gateway stage-level default throttling |
 
 ---
 
@@ -2330,20 +2343,36 @@ CDK asset:  {github.sha}  (passed as CDK context variable)
 
 ### 9.4 Reusable Workflow — `_build-lambdas.yml`
 
-Builds all Lambda functions with esbuild (tree-shaken, bundled, minified). Uploads ZIPs to S3 artifact bucket. Called by both `deploy-dev.yml` and `deploy-prod.yml`.
+Builds all Lambda functions with esbuild (tree-shaken, bundled, minified). Uploads ZIPs to the shared CI/CD artifact bucket. Called by both `deploy-dev.yml` and `deploy-prod.yml`.
+
+**Artifact bucket**: `duseum-cicd-artifacts` — pre-provisioned shared bucket (not environment-specific). Both dev and prod pipelines upload to this bucket, namespaced by environment in the S3 key path.
+
+**S3 path convention**:
+```
+duseum-cicd-artifacts/{env}/lambda/{sha}/{name}/function.zip
+duseum-cicd-artifacts/{env}/api-gateway/{sha}/...
+duseum-cicd-artifacts/{env}/misc/{sha}/...
+```
+
+The `{env}/` prefix provides logical isolation between dev and prod artifacts within the shared bucket. Lifecycle rules should be configured to expire objects under each prefix independently (e.g., dev artifacts expire after 7 days; prod artifacts after 30 days).
 
 ```yaml
 # .github/workflows/_build-lambdas.yml
 on:
   workflow_call:
     inputs:
-      sha: { type: string, required: true }
+      sha:         { type: string, required: true }
+      environment: { type: string, required: true }   # dev | prod — sets S3 key prefix and OIDC env
     outputs:
       artifact-bucket: { value: ${{ jobs.build.outputs.artifact-bucket }} }
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}            # OIDC sub claim must match role trust policy
+    permissions:
+      id-token: write
+      contents: read
     outputs:
       artifact-bucket: ${{ steps.upload.outputs.bucket }}
     steps:
@@ -2355,10 +2384,12 @@ jobs:
       # Each lambda outputs a ZIP to dist/lambdas/{name}/function.zip
       - id: upload
         run: |
-          BUCKET="duseum-dev-lambda-artifacts"
+          BUCKET="duseum-cicd-artifacts"
+          ENV="${{ inputs.environment }}"
+          SHA="${{ inputs.sha }}"
           for ZIP in dist/lambdas/*/function.zip; do
             NAME=$(basename $(dirname $ZIP))
-            aws s3 cp $ZIP s3://$BUCKET/${{ inputs.sha }}/$NAME/function.zip
+            aws s3 cp $ZIP s3://$BUCKET/$ENV/lambda/$SHA/$NAME/function.zip
           done
           echo "bucket=$BUCKET" >> $GITHUB_OUTPUT
 ```
@@ -2401,6 +2432,8 @@ jobs:
 
 ### 9.6 Deploy Workflow — `deploy-dev.yml`
 
+> **Source of truth**: `.github/workflows/deploy-dev.yml` is authoritative. The snippet below illustrates structure only — read the actual file before making changes.
+
 ```yaml
 # .github/workflows/deploy-dev.yml
 name: Deploy — dev
@@ -2434,14 +2467,28 @@ jobs:
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID_DEV }}
 
   smoke-test:
-    needs: deploy
+    needs: deploy-frontend
     runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      - run: ./scripts/smoke-test.sh dev
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+          aws-region: us-east-1
+      - name: Run smoke tests
+        run: bash scripts/smoke-test.sh dev ${{ github.sha }}
+        # Runs pytest (scripts/smoke_tests/test_smoke.py); uploads JSON results to
+        # s3://duseum-cicd-artifacts/dev/smoke-tests/{sha}.results.json
 ```
 
 ### 9.7 Deploy Workflow — `deploy-prod.yml`
+
+> **Source of truth**: `.github/workflows/deploy-prod.yml` is authoritative. The snippet below illustrates structure only — read the actual file before making changes.
 
 ```yaml
 # .github/workflows/deploy-prod.yml
@@ -2478,11 +2525,23 @@ jobs:
     # will pause for manual approval before running.
 
   smoke-test:
-    needs: deploy-prod
+    needs: deploy-frontend
     runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      - run: ./scripts/smoke-test.sh prod
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+          aws-region: us-east-1
+      - name: Run smoke tests
+        run: bash scripts/smoke-test.sh prod ${{ github.sha }}
+        # Runs pytest (scripts/smoke_tests/test_smoke.py); uploads JSON results to
+        # s3://duseum-cicd-artifacts/prod/smoke-tests/{sha}.results.json
 ```
 
 ---
@@ -2729,7 +2788,7 @@ Push a commit to `develop`. The `deploy-dev.yml` workflow triggers automatically
 
 Verify:
 ```bash
-./scripts/smoke-test.sh dev
+SMOKE_ENV=dev bash scripts/smoke-test.sh dev
 ```
 
 ### 11.7 Phase 5 — Production Go-Live Checklist
@@ -2741,7 +2800,7 @@ Verify:
 □ ACM certificate status = ISSUED in prod account
 □ All SSM parameters present for prod: aws ssm get-parameters-by-path ...
 □ CDK deploy to prod completed (via deploy-prod.yml workflow_dispatch)
-□ Smoke tests passing: ./scripts/smoke-test.sh prod
+□ Smoke tests passing: bash scripts/smoke-test.sh prod $SHA
 □ CloudFront signed URL generation tested end-to-end (private art piece)
 □ Stripe webhook test event processed successfully (use stripe trigger command)
 ```
@@ -3131,7 +3190,7 @@ All estimates are for `us-east-1`. Dev costs assume light development traffic (~
 | SQS | 1M requests | $0.00 (free tier) |
 | SES | ~50K emails/month (500 MAU × ~100 notifications) | ~$5.00 |
 | Secrets Manager | 6 secrets | ~$2.40 |
-| WAF | 10M requests | ~$6.00 |
+| WAF (CloudFront only) | 10M requests | ~$6.00 |
 | CloudWatch | Logs + dashboards + alarms | ~$5.00 |
 | Route 53 | 1 hosted zone + queries | ~$1.00 |
 | ACM | Free with CloudFront | $0.00 |
@@ -3153,6 +3212,14 @@ All estimates are for `us-east-1`. Dev costs assume light development traffic (~
 | Lambda integration | Vitest + MiniStack | All happy + error paths |
 | Frontend unit | Vitest + Testing Library | 70% coverage |
 | E2E | Playwright | Critical user flows only |
+| Post-deploy smoke | pytest + boto3 + requests | Run after every deploy (dev + prod) |
+
+**Smoke test details** (`scripts/smoke_tests/`):
+- Framework: **pytest** with `pytest-json-report` for structured JSON output
+- Test classes: `TestApiEndpoints` (5), `TestDynamoDB` (3 parametrized), `TestCloudFront` (2), `TestSPADomain` (2) — 12 tests total
+- Results uploaded to: `s3://duseum-cicd-artifacts/{env}/smoke-tests/{sha}.results.json`
+- Script: `scripts/smoke-test.sh {env} [{sha}]` — does NOT use `set -e`; collects all results before exiting with pytest's exit code
+- `SMOKE_ENV` env var controls which environment's endpoints and resource names are tested
 
 ### 15.2 Unit Tests — `packages/shared`
 

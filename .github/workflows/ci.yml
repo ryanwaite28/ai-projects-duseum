@@ -70,6 +70,13 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      - name: Initialize MiniStack resources
+        run: bash scripts/ministack-init.sh
+        env:
+          AWS_ENDPOINT_URL: http://localhost:4566
+          AWS_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
       - name: Run lambda tests (unit + integration against MiniStack)
         run: npx turbo run test --filter='./lambdas/**'
         env:
@@ -90,7 +97,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: CDK synth dev
-        run: cd infrastructure && npx cdk synth --strict --context env=dev
+        run: cd infrastructure && npx cdk synth "duseum-dev/**" --strict --context env=dev --context sha=0000000000000000000000000000000000000000
 
   # ── CDK synth validate — prod ────────────────────────────────────────────────
   cdk-synth-prod:
@@ -104,4 +111,4 @@ jobs:
           cache: npm
       - run: npm ci
       - name: CDK synth prod
-        run: cd infrastructure && npx cdk synth --strict --context env=prod
+        run: cd infrastructure && npx cdk synth "duseum-prod/**" --strict --context env=prod --context sha=0000000000000000000000000000000000000000

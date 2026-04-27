@@ -49,12 +49,13 @@ Two separate Stripe accounts — one per environment:
 | dev | `acct_1TMYUPDeejIUwJIS` | `ca_ULF5h4bUlGnwEo3YRUioqoI8hogxwvcb` | `we_1TMiBcDeejIUwJISRTd0wITw` |
 | prod | `acct_1TMYUIRUKQLlSd6o` | `ca_ULF9jsCeRlmkF08gQBXwDqivNgiw38lA` | `we_1TMiH8RUKQLlSd6oP9UMFQ3C` |
 
-**Extra subscribed webhook events** (beyond PROJECT.md spec): The webhook endpoints also receive `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.payment_succeeded`, `subscription_schedule.*`, and `customer.subscription.trial_will_end`. The `subscriptions-webhook-lambda` must handle all of these gracefully:
+**Extra subscribed webhook events** (beyond PROJECT.md spec): The webhook endpoints also receive `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.payment_succeeded`, `subscription_schedule.*`, `customer.subscription.trial_will_end`, and `account.updated`. The `subscriptions-webhook-lambda` must handle all of these gracefully:
 - `customer.subscription.paused` → update Subscription status to `PAUSED` in DynamoDB
 - `customer.subscription.resumed` → update Subscription status back to `ACTIVE`
 - `invoice.payment_succeeded` → acknowledge + skip (no state change needed)
 - All `subscription_schedule.*` → log + skip (not used in v1)
 - `customer.subscription.trial_will_end` → log + skip (no trials in v1)
+- `account.updated` → update Author DynamoDB record with `connectChargesEnabled: account.charges_enabled` (FR-SUB-13); idempotent — safe to apply multiple times
 
 ## IAM Role Naming (project-scoped)
 
@@ -119,6 +120,8 @@ All IAM resources tagged: `Project=duseum`, `Environment={env}`, `ManagedBy=CDK`
 - Don't name IAM roles, policies, or resources without the `duseum-` prefix — all IAM resources are project-scoped
 - Don't use `Fn.importValue()` in CDK — use SSM for cross-stack wiring
 - Don't hardcode AWS account ID `408141212087` anywhere in code, CDK, or workflows — read from environment/SSM
+- Don't call `addToResourcePolicy()` on a bucket imported via `Bucket.fromBucketName()` with an SSM-resolved (token) name — `autoCreatePolicy = false` makes it a **silent no-op** (no `AWS::S3::BucketPolicy` resource is emitted). S3 bucket policies (including CloudFront OAC Allow statements) must be added in the stack that **owns** the `Bucket` construct (StorageStack), not in a stack that imports it.
+- Don't try to attach a WAF WebACL (REGIONAL scope) to an API Gateway HTTP API — the ARN format `/apis/{id}/stages/$default` is invalid for `CfnWebACLAssociation`. WAF REGIONAL only supports API Gateway REST APIs. For HTTP API v2 the protection layers are the Cognito JWT authorizer + stage-level throttling. WAF protection is available via CLOUDFRONT scope (in CdnStack) if CloudFront is fronting the API.
 
 **Frontend / Design System:**
 - Don't use colors not in the design token set — no arbitrary hex values, no `text-blue-*`, no `bg-white` (use `bg-ink` or `text-warm-white`)

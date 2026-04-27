@@ -52,6 +52,7 @@ beforeAll(async () => {
         { AttributeName: 'profileType', AttributeType: 'S' },
         { AttributeName: 'createdAt',   AttributeType: 'S' },
         { AttributeName: 'status',      AttributeType: 'S' },
+        { AttributeName: 'followedAt',  AttributeType: 'S' },
       ],
       GlobalSecondaryIndexes: [
         {
@@ -75,6 +76,14 @@ beforeAll(async () => {
           KeySchema: [
             { AttributeName: 'profileType', KeyType: 'HASH' },
             { AttributeName: 'createdAt',   KeyType: 'RANGE' },
+          ],
+          Projection: { ProjectionType: 'ALL' },
+        },
+        {
+          IndexName: 'GSI-FollowersByAuthor',
+          KeySchema: [
+            { AttributeName: 'authorId',   KeyType: 'HASH' },
+            { AttributeName: 'followedAt', KeyType: 'RANGE' },
           ],
           Projection: { ProjectionType: 'ALL' },
         },

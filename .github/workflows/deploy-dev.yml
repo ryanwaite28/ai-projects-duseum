@@ -23,8 +23,10 @@ jobs:
     uses: ./.github/workflows/_build-lambdas.yml
     with:
       sha: ${{ github.sha }}
+      env: dev
+      environment: build
     secrets:
-      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_BUILD }}
 
   # ── Deploy all CDK stacks to dev ─────────────────────────────────────────────
   deploy:
@@ -37,11 +39,23 @@ jobs:
     secrets:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
 
+  # ── Build and deploy frontend SPA to S3 + CloudFront ────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend (dev)
+    needs: [deploy]
+    uses: ./.github/workflows/_deploy-frontend.yml
+    with:
+      environment: dev
+      sha: ${{ github.sha }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+
   # ── Post-deploy smoke tests ───────────────────────────────────────────────────
   smoke-test:
     name: Smoke Test (dev)
-    needs: [deploy]
+    needs: [deploy-frontend]
     runs-on: ubuntu-latest
+    environment: dev
     permissions:
       id-token: write
       contents: read
@@ -53,4 +67,4 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
           aws-region: us-east-1
       - name: Run smoke tests
-        run: bash scripts/smoke-test.sh dev
+        run: bash scripts/smoke-test.sh dev ${{ github.sha }}

@@ -18,15 +18,16 @@ jobs:
     secrets: inherit
 
   # ── Build Lambda ZIPs and upload to S3 artifact bucket ──────────────────────
-  # Uses dev role since the artifact bucket lives in the shared account.
   build:
     name: Build
     needs: [ci]
     uses: ./.github/workflows/_build-lambdas.yml
     with:
       sha: ${{ github.sha }}
+      env: prod
+      environment: build
     secrets:
-      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_BUILD }}
 
   # ── Deploy all CDK stacks to prod ────────────────────────────────────────────
   # The "prod" GitHub Environment requires manual approval before this job runs.
@@ -41,11 +42,23 @@ jobs:
     secrets:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
 
+  # ── Build and deploy frontend SPA to S3 + CloudFront ────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend (prod)
+    needs: [deploy-prod]
+    uses: ./.github/workflows/_deploy-frontend.yml
+    with:
+      environment: prod
+      sha: ${{ github.sha }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+
   # ── Post-deploy smoke tests ───────────────────────────────────────────────────
   smoke-test:
     name: Smoke Test (prod)
-    needs: [deploy-prod]
+    needs: [deploy-frontend]
     runs-on: ubuntu-latest
+    environment: prod
     permissions:
       id-token: write
       contents: read
@@ -57,4 +70,4 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
           aws-region: us-east-1
       - name: Run smoke tests
-        run: bash scripts/smoke-test.sh prod
+        run: bash scripts/smoke-test.sh prod ${{ github.sha }}

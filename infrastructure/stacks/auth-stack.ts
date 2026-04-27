@@ -13,7 +13,6 @@
 //   credentials are stored in Secrets Manager.
 // =============================================================================
 
-import * as path from 'path'
 import * as cdk from 'aws-cdk-lib'
 import * as cognito from 'aws-cdk-lib/aws-cognito'
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
@@ -99,7 +98,7 @@ export class AuthStack extends cdk.Stack {
     // App Client (SPA — no client secret)
     // =========================================================================
 
-    const appDomain = envName === 'prod' ? 'https://app.duseum.com' : `https://app.${envName}.duseum.com`
+    const appDomain = envName === 'prod' ? 'https://duseum.com' : `https://${envName}.duseum.com`
 
     this.userPoolClient = new cognito.UserPoolClient(this, 'UserPoolClient', {
       userPool: this.userPool,
@@ -159,10 +158,8 @@ export class AuthStack extends cdk.Stack {
     )
 
     const triggerFn = new DuseumLambdaFunction(this, 'auth-triggers', {
-      entry: path.resolve(__dirname, '../../lambdas/auth-triggers/src/handler.ts'),
       envName,
       description: 'Cognito Post-Confirmation: auto-creates UserAccount + ViewerProfile',
-      reservedConcurrentExecutions: 10,
       environment: {
         DYNAMODB_TABLE_NAME: mainTableName,
       },
