@@ -60,16 +60,15 @@ jobs:
           echo "spa_bucket=$(get /duseum/$ENV/stacks/storage/spa_bucket_name)"        >> "$GITHUB_OUTPUT"
           echo "cf_dist_id=$(get /duseum/$ENV/stacks/cdn/app_distribution_id)"        >> "$GITHUB_OUTPUT"
 
-      # ── Read Stripe publishable key from Secrets Manager ───────────────────
+      # ── Read Stripe publishable key from SSM (it's a public value, not a secret) ──
       - name: Read Stripe publishable key
         id: stripe
         env:
           ENV: ${{ inputs.environment }}
         run: |
-          KEY=$(aws secretsmanager get-secret-value \
-            --secret-id "/duseum/$ENV/stripe/publishable_key" \
-            --query SecretString --output text)
-          echo "::add-mask::$KEY"
+          KEY=$(aws ssm get-parameter \
+            --name "/duseum/$ENV/stripe/publishable_key" \
+            --query Parameter.Value --output text)
           echo "publishable_key=$KEY" >> "$GITHUB_OUTPUT"
 
       # ── Build SPA ──────────────────────────────────────────────────────────
