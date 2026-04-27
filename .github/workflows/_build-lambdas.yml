@@ -14,6 +14,10 @@ on:
         required: true
         type: string
         description: Git SHA used as the S3 prefix for this build
+      environment:
+        required: true
+        type: string
+        description: GitHub Environment to run under (controls OIDC sub claim for role assumption)
     outputs:
       artifact-bucket:
         description: S3 bucket where ZIPs were uploaded
@@ -27,9 +31,7 @@ jobs:
   build:
     name: Build & Upload Lambda ZIPs
     runs-on: ubuntu-latest
-    # Artifact bucket always lives in the dev account — dev environment required
-    # so the OIDC sub claim matches the deploy-dev role trust policy.
-    environment: dev
+    environment: ${{ inputs.environment }}
     permissions:
       id-token: write
       contents: read
@@ -74,13 +76,14 @@ jobs:
       - name: Upload ZIPs to S3
         id: upload
         run: |
-          BUCKET="duseum-dev-lambda-artifacts"
+          BUCKET="duseum-cicd-artifacts"
+          ENV="${{ inputs.environment }}"
           SHA="${{ inputs.sha }}"
           LAMBDAS="admin artworks auth-triggers features maintenance media notifications social subscriptions subscriptions-webhook users"
           for NAME in $LAMBDAS; do
             aws s3 cp dist/lambdas/$NAME/function.zip \
-              s3://$BUCKET/$SHA/$NAME/function.zip \
+              s3://$BUCKET/$ENV/lambda/$SHA/$NAME/function.zip \
               --region us-east-1
-            echo "Uploaded s3://$BUCKET/$SHA/$NAME/function.zip"
+            echo "Uploaded s3://$BUCKET/$ENV/lambda/$SHA/$NAME/function.zip"
           done
           echo "bucket=$BUCKET" >> $GITHUB_OUTPUT

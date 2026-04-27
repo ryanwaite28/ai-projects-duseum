@@ -1042,6 +1042,98 @@ put_ssm "/duseum/dev/stripe/publishable_key"  "$DEV_STRIPE_PK"  "dev"
 put_ssm "/duseum/prod/stripe/publishable_key" "$PROD_STRIPE_PK" "prod"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 3.5 — CI/CD artifact bucket
+#
+# Shared bucket used by both dev and prod pipelines. Not environment-specific —
+# isolation is via the S3 key prefix: {env}/lambda/{sha}/{name}/function.zip
+#
+# Name is intentionally free of the {env} segment (it serves both environments)
+# and is stored in SSM so CDK stacks and scripts can reference it without
+# hardcoding. The single known exception is _build-lambdas.yml, which must know
+# the name before it can assume any role (chicken-and-egg).
+#
+# IAM: both deploy roles carry AdministratorAccess — no explicit bucket policy
+# is required. Public access is blocked and SSE-S3 is applied for defence in depth.
+# Lifecycle rules expire dev artifacts after 7 days and prod after 30 days to
+# prevent unbounded accumulation.
+# ═══════════════════════════════════════════════════════════════════════════════
+step "CI/CD artifact bucket — duseum-cicd-artifacts"
+
+CICD_BUCKET="duseum-cicd-artifacts"
+
+if aws_cmd s3api head-bucket --bucket "$CICD_BUCKET" &>/dev/null; then
+  success "  s3://${CICD_BUCKET} (exists — skipping create)"
+else
+  info "  Creating s3://${CICD_BUCKET}..."
+  aws_cmd s3api create-bucket \
+    --bucket "$CICD_BUCKET" \
+    --region "$AWS_REGION" \
+    --create-bucket-configuration "LocationConstraint=${AWS_REGION}" \
+    --output text >/dev/null 2>/dev/null || \
+  aws_cmd s3api create-bucket \
+    --bucket "$CICD_BUCKET" \
+    --region "$AWS_REGION" \
+    --output text >/dev/null
+  success "  s3://${CICD_BUCKET} created"
+fi
+
+# Block all public access
+aws_cmd s3api put-public-access-block \
+  --bucket "$CICD_BUCKET" \
+  --public-access-block-configuration \
+    'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true' \
+  --output text >/dev/null
+success "  Public access blocked"
+
+# Enable SSE-S3 (server-side encryption)
+aws_cmd s3api put-bucket-encryption \
+  --bucket "$CICD_BUCKET" \
+  --server-side-encryption-configuration '{
+    "Rules": [{
+      "ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"},
+      "BucketKeyEnabled": true
+    }]
+  }' --output text >/dev/null
+success "  SSE-S3 enabled"
+
+# Lifecycle rules: expire dev artifacts after 7 days, prod after 30 days
+aws_cmd s3api put-bucket-lifecycle-configuration \
+  --bucket "$CICD_BUCKET" \
+  --lifecycle-configuration '{
+    "Rules": [
+      {
+        "ID": "expire-dev-artifacts",
+        "Status": "Enabled",
+        "Filter": {"Prefix": "dev/"},
+        "Expiration": {"Days": 7}
+      },
+      {
+        "ID": "expire-prod-artifacts",
+        "Status": "Enabled",
+        "Filter": {"Prefix": "prod/"},
+        "Expiration": {"Days": 30}
+      }
+    ]
+  }' --output text >/dev/null
+success "  Lifecycle rules: dev/→7d, prod/→30d"
+
+# Tag the bucket as shared infrastructure (not tied to one environment)
+aws_cmd s3api put-bucket-tagging \
+  --bucket "$CICD_BUCKET" \
+  --tagging '{
+    "TagSet": [
+      {"Key": "Project",     "Value": "duseum"},
+      {"Key": "Environment", "Value": "shared"},
+      {"Key": "ManagedBy",   "Value": "bootstrap"}
+    ]
+  }' --output text >/dev/null
+success "  Tags applied (Environment=shared)"
+
+# Store bucket name in SSM — authoritative reference for CDK stacks and scripts
+put_ssm "/duseum/cicd/artifact_bucket_name" "$CICD_BUCKET" "shared"
+success "  SSM: /duseum/cicd/artifact_bucket_name = ${CICD_BUCKET}"
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 4 — CloudFront RSA key pairs + key groups (for signed URLs)
 # ═══════════════════════════════════════════════════════════════════════════════
 provision_cloudfront_key() {
@@ -1257,12 +1349,16 @@ echo -e "${BOLD}${GREEN}══════════════════�
 echo -e "${BOLD}${GREEN}  Bootstrap complete!${NC}"
 echo -e "${BOLD}${GREEN}════════════════════════════════════════════════════════════════${NC}"
 echo ""
+echo -e "${BOLD}CI/CD artifact bucket:${NC}"
+echo "  s3://duseum-cicd-artifacts"
+echo "  dev/  → expires 7 days  |  prod/ → expires 30 days"
+echo ""
 echo -e "${BOLD}Next: add these as GitHub Actions secrets${NC}"
 echo "  Repo → Settings → Secrets and variables → Actions:"
 echo ""
-echo "  AWS_ACCOUNT_ID    = ${AWS_ACCOUNT_ID}"
-echo "  AWS_ROLE_ARN_DEV  = ${DEV_ROLE_ARN}"
-echo "  AWS_ROLE_ARN_PROD = ${PROD_ROLE_ARN}"
+echo "  AWS_ACCOUNT_ID          = ${AWS_ACCOUNT_ID}"
+echo "  AWS_ROLE_ARN_DEPLOY_DEV  = ${DEV_ROLE_ARN}"
+echo "  AWS_ROLE_ARN_DEPLOY_PROD = ${PROD_ROLE_ARN}"
 echo ""
 echo -e "${BOLD}Next: create GitHub Environments${NC}"
 echo "  Repo → Settings → Environments:"

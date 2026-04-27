@@ -22,9 +22,11 @@ jobs:
   build:
     name: Build
     needs: [ci]
+    # Artifact bucket lives in the shared dev account — build uses the dev role.
     uses: ./.github/workflows/_build-lambdas.yml
     with:
       sha: ${{ github.sha }}
+      environment: dev
     secrets:
       AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
 
