@@ -63,11 +63,13 @@ export class CdnStack extends cdk.Stack {
     cdk.Tags.of(this).add('Stack', this.stackName)
 
     // ── CDK context ───────────────────────────────────────────────────────────
-    const certArn     = this.node.tryGetContext(`certArn.${envName}`) as string
-    const keyPairId   = this.node.tryGetContext(`cloudfrontKeyPairId.${envName}`) as string
+    const certArn      = this.node.tryGetContext(`certArn.${envName}`) as string
+    const mediaCertArn = this.node.tryGetContext(`mediaCertArn.${envName}`) as string
+    const keyPairId    = this.node.tryGetContext(`cloudfrontKeyPairId.${envName}`) as string
     const hostedZoneId = this.node.tryGetContext('hostedZoneId') as string
 
     if (!certArn)      throw new Error(`Missing CDK context: certArn.${envName}`)
+    if (!mediaCertArn) throw new Error(`Missing CDK context: mediaCertArn.${envName}`)
     if (!keyPairId)    throw new Error(`Missing CDK context: cloudfrontKeyPairId.${envName}`)
     if (!hostedZoneId) throw new Error('Missing CDK context: hostedZoneId')
 
@@ -252,7 +254,7 @@ export class CdnStack extends cdk.Stack {
         ipv6Enabled: true,
         aliases:     mediaAliases,
         viewerCertificate: {
-          acmCertificateArn:      certArn,
+          acmCertificateArn:      mediaCertArn,
           sslSupportMethod:       'sni-only',
           minimumProtocolVersion: 'TLSv1.2_2021',
         },
