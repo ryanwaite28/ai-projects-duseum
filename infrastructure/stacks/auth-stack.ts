@@ -160,7 +160,6 @@ export class AuthStack extends cdk.Stack {
     const triggerFn = new DuseumLambdaFunction(this, 'auth-triggers', {
       envName,
       description: 'Cognito Post-Confirmation: auto-creates UserAccount + ViewerProfile',
-      reservedConcurrentExecutions: 10,
       environment: {
         DYNAMODB_TABLE_NAME: mainTableName,
       },
