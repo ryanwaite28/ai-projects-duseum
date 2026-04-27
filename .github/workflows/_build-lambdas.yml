@@ -1,11 +1,16 @@
 name: Build Lambdas (reusable)
 
 # Builds all Lambda functions with esbuild (tree-shaken, bundled, minified,
-# node20 target) and uploads ZIPs to the S3 artifact bucket at:
-#   s3://duseum-dev-lambda-artifacts/{sha}/{name}/function.zip
+# node20 target) and uploads ZIPs to the shared CI/CD artifact bucket at:
+#   s3://duseum-cicd-artifacts/{env}/lambda/{sha}/{name}/function.zip
 #
-# Prerequisite: S3 bucket duseum-dev-lambda-artifacts must exist in account
-# 408141212087 (created once manually or via bootstrap script).
+# Prerequisite: S3 bucket duseum-cicd-artifacts must exist in account
+# 408141212087 — created by scripts/bootstrap.sh (Section 3.5).
+#
+# The "environment" input controls both the GitHub Environment (OIDC sub claim)
+# and the S3 key prefix — both callers should pass environment: build so the
+# build step uses the dedicated least-privilege build role rather than a
+# deploy role tied to dev or prod.
 
 on:
   workflow_call:
@@ -25,7 +30,7 @@ on:
     secrets:
       AWS_ROLE_ARN_BUILD:
         required: true
-        description: IAM role ARN for S3 upload (deploy-dev role has s3:PutObject on artifact bucket)
+        description: ARN of duseum-github-actions-build — least-privilege role with s3:PutObject on duseum-cicd-artifacts only
 
 jobs:
   build:

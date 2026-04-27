@@ -1336,11 +1336,94 @@ provision_deploy_role() {
 provision_deploy_role "dev"
 provision_deploy_role "prod"
 
+# ── Build role — least-privilege, environment:build, S3-only ─────────────────
+# Separate from the deploy roles so neither dev nor prod deployment is a
+# prerequisite for running the build step. Decouples artifact upload from
+# CDK deploy permissions and from any specific environment.
+step "IAM role — duseum-github-actions-build"
+
+BUILD_ROLE_NAME="duseum-github-actions-build"
+BUILD_ROLE_SSM="/duseum/cicd/github_build_role_arn"
+
+BUILD_TRUST=$(jq -n \
+  --arg oidc_arn "$GITHUB_OIDC_PROVIDER_ARN" \
+  --arg sub      "repo:${GITHUB_REPO}:environment:build" \
+  '{
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Allow",
+      Principal: { Federated: $oidc_arn },
+      Action: "sts:AssumeRoleWithWebIdentity",
+      Condition: {
+        StringEquals: {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        StringLike: {
+          "token.actions.githubusercontent.com:sub": $sub
+        }
+      }
+    }]
+  }')
+
+if iam_role_exists "$BUILD_ROLE_NAME"; then
+  info "  Role already exists — refreshing trust policy"
+  aws_cmd iam update-assume-role-policy \
+    --role-name "$BUILD_ROLE_NAME" \
+    --policy-document "$BUILD_TRUST" >/dev/null
+  success "  Trust policy refreshed for ${BUILD_ROLE_NAME}"
+else
+  aws_cmd iam create-role \
+    --role-name "$BUILD_ROLE_NAME" \
+    --assume-role-policy-document "$BUILD_TRUST" \
+    --description "GitHub Actions OIDC build role - s3:PutObject on duseum-cicd-artifacts only" \
+    --max-session-duration 3600 \
+    --tags \
+      "Key=Project,Value=duseum" \
+      "Key=Environment,Value=shared" \
+      "Key=ManagedBy,Value=bootstrap" \
+    --output text >/dev/null
+  success "  Role created: ${BUILD_ROLE_NAME}"
+fi
+
+# Least-privilege inline policy — only what aws s3 cp needs to upload ZIPs
+BUILD_POLICY=$(jq -n \
+  --arg bucket_arn "arn:aws:s3:::duseum-cicd-artifacts" \
+  '{
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "UploadArtifacts",
+        Effect: "Allow",
+        Action: ["s3:PutObject"],
+        Resource: ($bucket_arn + "/*")
+      },
+      {
+        Sid: "BucketLocation",
+        Effect: "Allow",
+        Action: ["s3:GetBucketLocation"],
+        Resource: $bucket_arn
+      }
+    ]
+  }')
+
+aws_cmd iam put-role-policy \
+  --role-name "$BUILD_ROLE_NAME" \
+  --policy-name "duseum-cicd-artifact-upload" \
+  --policy-document "$BUILD_POLICY" >/dev/null
+success "  Inline policy: s3:PutObject + s3:GetBucketLocation on duseum-cicd-artifacts"
+
+BUILD_ROLE_ARN=$(aws_cmd iam get-role \
+  --role-name "$BUILD_ROLE_NAME" \
+  --query 'Role.Arn' --output text)
+put_ssm "$BUILD_ROLE_SSM" "$BUILD_ROLE_ARN" "shared"
+success "  ${BUILD_ROLE_NAME}: ${BUILD_ROLE_ARN}"
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════════════════
 DEV_ROLE_ARN=$(get_ssm "/duseum/dev/iam/github_deploy_role_arn")
 PROD_ROLE_ARN=$(get_ssm "/duseum/prod/iam/github_deploy_role_arn")
+BUILD_ROLE_ARN=$(get_ssm "/duseum/cicd/github_build_role_arn")
 DEV_CF_KEY_ID=$(get_ssm "/duseum/dev/cloudfront/key_pair_id")
 PROD_CF_KEY_ID=$(get_ssm "/duseum/prod/cloudfront/key_pair_id")
 
@@ -1356,7 +1439,8 @@ echo ""
 echo -e "${BOLD}Next: add these as GitHub Actions secrets${NC}"
 echo "  Repo → Settings → Secrets and variables → Actions:"
 echo ""
-echo "  AWS_ACCOUNT_ID          = ${AWS_ACCOUNT_ID}"
+echo "  AWS_ACCOUNT_ID           = ${AWS_ACCOUNT_ID}"
+echo "  AWS_ROLE_ARN_BUILD       = ${BUILD_ROLE_ARN}"
 echo "  AWS_ROLE_ARN_DEPLOY_DEV  = ${DEV_ROLE_ARN}"
 echo "  AWS_ROLE_ARN_DEPLOY_PROD = ${PROD_ROLE_ARN}"
 echo ""
