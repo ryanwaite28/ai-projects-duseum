@@ -16,6 +16,7 @@
 - [ ] Pinned pieces drag-and-drop enforces max 3 before allowing reorder
 - [ ] Collections tab creates, lists, and manages pieces within collections
 - [ ] Bookings tab shows upcoming + past bookings with correct status badges
+- [x] Subscribers tab shows paginated subscriber list with status badges + count stat (see `subscriptions/my-subscribers.md`)
 - [ ] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:

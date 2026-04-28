@@ -12,17 +12,19 @@ import { CollectionsTab }     from './tabs/collections-tab'
 import { PinnedTab }          from './tabs/pinned-tab'
 import { AnalyticsTab }       from './tabs/analytics-tab'
 import { FeatureHistoryTab }  from './tabs/feature-history-tab'
+import { SubscribersTab }     from './tabs/subscribers-tab'
 import { authorDashboardService } from '../../services/author-dashboard.service'
 
 // ── Tab config ────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'pieces' | 'collections' | 'pinned' | 'analytics' | 'features'
+type TabId = 'overview' | 'pieces' | 'collections' | 'pinned' | 'analytics' | 'features' | 'subscribers'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'overview',     label: 'Overview'      },
   { id: 'pieces',       label: 'My Pieces'     },
   { id: 'collections',  label: 'Collections'   },
   { id: 'pinned',       label: 'Pinned Pieces'  },
+  { id: 'subscribers',  label: 'Subscribers'   },
   { id: 'analytics',   label: 'Analytics'     },
   { id: 'features',    label: 'Feature Slots'  },
 ]
@@ -129,6 +131,7 @@ function AuthorDashboardContent() {
       {activeTab === 'pieces'      && <PiecesTab />}
       {activeTab === 'collections' && <CollectionsTab />}
       {activeTab === 'pinned'      && <PinnedTab />}
+      {activeTab === 'subscribers' && <SubscribersTab />}
       {activeTab === 'analytics'   && <AnalyticsTab />}
       {activeTab === 'features'    && <FeatureHistoryTab />}
     </>
