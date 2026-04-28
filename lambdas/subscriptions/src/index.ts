@@ -4,6 +4,7 @@
 //
 // Routes (plain TypeScript switch — no Express, no Hono):
 //   GET    /subscriptions/me                         → getMySubscriptions     (JWT required)
+//   GET    /subscriptions/me/subscribers             → getMySubscribers       (JWT required)
 //   POST   /subscriptions/platform                   → createPlatformCheckout (JWT required)
 //   POST   /subscriptions/authors/{authorId}         → createAuthorCheckout   (JWT required)
 //   POST   /subscriptions/portal                     → createPortalSession     (JWT required)
@@ -22,6 +23,7 @@ import {
 } from '@duseum/shared'
 import type { DuseumContext } from '@duseum/shared'
 import { getMySubscriptions }     from './routes/get-my-subscriptions.js'
+import { getMySubscribers }       from './routes/get-my-subscribers.js'
 import { createPlatformCheckout } from './routes/create-platform-checkout.js'
 import { createAuthorCheckout }   from './routes/create-author-checkout.js'
 import { createPortalSession }    from './routes/create-portal-session.js'
@@ -35,6 +37,11 @@ const dispatch = async (
 ): Promise<APIGatewayProxyStructuredResultV2> => {
   const { method, path } = event.requestContext.http
   const authorId = event.pathParameters?.['authorId']
+
+  // GET /subscriptions/me/subscribers (must come before /me)
+  if (method === 'GET' && path.endsWith('/me/subscribers')) {
+    return getMySubscribers(event, context)
+  }
 
   // GET /subscriptions/me
   if (method === 'GET' && path.endsWith('/me')) {

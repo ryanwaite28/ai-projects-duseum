@@ -15,6 +15,20 @@ export interface MySubscriptionsResponse {
   authorSubscriptions: Subscription[]
 }
 
+export interface SubscriberItem {
+  userId:               string
+  stripeSubscriptionId: string
+  status:               'ACTIVE' | 'PAST_DUE' | 'CANCELLED' | 'INCOMPLETE' | 'PAUSED'
+  currentPeriodEnd:     string
+  createdAt:            string
+}
+
+export interface MySubscribersResponse {
+  items:      SubscriberItem[]
+  nextCursor: string | null
+  total:      number
+}
+
 export interface CheckoutResponse {
   checkoutUrl: string
 }
@@ -35,4 +49,9 @@ export const subscriptionsService = {
 
   createPortalSession: () =>
     api.post<PortalResponse>('/subscriptions/portal', {}),
+
+  getMySubscribers: (cursor?: string) => {
+    const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+    return api.get<MySubscribersResponse>(`/subscriptions/me/subscribers${qs}`)
+  },
 }

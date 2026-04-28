@@ -42,6 +42,7 @@ Run `/sync-specs` to audit FR coverage and generate stubs for any uncovered func
 | [webhook-processing.md](subscriptions/webhook-processing.md) | FR-SUB-03, 13, FR-FEAT-17 | ✅ Implemented |
 | [connect-onboarding.md](subscriptions/connect-onboarding.md) | FR-SUB-07, 11, 12, 13 | ✅ Implemented |
 | [subscription-price.md](subscriptions/subscription-price.md) | FR-AUTH-PROF-05, FR-SUB-02 | ⬜ Pending |
+| [my-subscribers.md](subscriptions/my-subscribers.md) | FR-AUTH-PROF-09, FR-SUB-02 | ✅ Implemented |
 
 ## Social
 
@@ -101,6 +102,9 @@ Run `/sync-specs` to audit FR coverage and generate stubs for any uncovered func
 | [author-dashboard-ui.md](frontend/author-dashboard-ui.md) | FR-AUTH-PROF-06, 08, 09, FR-FEAT-18, FR-NOTIF-12 | ✅ Implemented (partial) |
 | [admin-panel-ui.md](frontend/admin-panel-ui.md) | FR-ADMIN-01–07 | ⬜ Pending |
 | [featured-ui.md](frontend/featured-ui.md) | FR-FEAT-07, 08, 10, 12, 16 | ⬜ Pending |
+| [route-protection.md](frontend/route-protection.md) | FR-AUTH-01, FR-ADMIN-01 | ✅ Implemented |
+| [navigation-user-menu.md](frontend/navigation-user-menu.md) | FR-VIEW-01, FR-AUTH-PROF-06 | ✅ Implemented |
+| [dashboard-settings-ui.md](frontend/dashboard-settings-ui.md) | FR-VIEW-01, 08, 09, 10, FR-AUTH-PROF-01, 06, FR-PROF-02, FR-SUB-09 | ✅ Implemented |
 
 ---
 
