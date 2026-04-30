@@ -104,10 +104,14 @@ export class MonitoringStack extends cdk.Stack {
     // X-Ray Groups — one per Lambda (NFR-OBS-03)
     // =========================================================================
 
+    // X-Ray group names have a 32-character AWS limit.
+    // `duseum-prod-subscriptions-webhook` is 33 chars, so truncate to 32.
+    const xrayGroupName = (id: string) => `duseum-${envName}-${id}`.slice(0, 32)
+
     for (const fnId of LAMBDA_IDS) {
       const functionName = `duseum-${envName}-lambda-${fnId}`
       new xray.CfnGroup(this, `XRayGroup${fnId.replace(/-/g, '')}`, {
-        groupName: `duseum-${envName}-${fnId}`,
+        groupName: xrayGroupName(fnId),
         filterExpression: `service(id(name: "${functionName}", type: "AWS::Lambda::Function"))`,
         insightsConfiguration: { insightsEnabled: false },
         tags: [
