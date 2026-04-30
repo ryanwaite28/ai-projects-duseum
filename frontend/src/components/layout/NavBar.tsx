@@ -1,9 +1,13 @@
 import { Link, NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../store/auth.store'
+import { useMe } from '../../hooks/use-me'
 import { Button } from '../ui/Button'
+import { UserMenu } from './UserMenu'
 
 export const NavBar = () => {
-  const { user, signOut } = useAuthStore()
+  const { user } = useAuthStore()
+  const { data: me } = useMe()
+  const isAuthor = !!user && me?.authorProfile != null
 
   return (
     <nav className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-10 py-5 bg-ink/80 backdrop-blur-xl border-b border-gold/12">
@@ -38,15 +42,15 @@ export const NavBar = () => {
       </ul>
 
       {/* Auth controls */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         {user ? (
           <>
-            <span className="hidden sm:block text-[0.82rem] font-light text-stone-light">
-              {user.displayName ?? user.email}
-            </span>
-            <Button variant="ghost" onClick={() => signOut()}>
-              Sign Out
-            </Button>
+            {isAuthor && (
+              <Link to="/upload">
+                <Button variant="ghost">Upload</Button>
+              </Link>
+            )}
+            <UserMenu />
           </>
         ) : (
           <>
