@@ -24,11 +24,11 @@
     "@aws-cdk/core:target-partitions": ["aws", "aws-cn"],
     "hostedZoneId": "Z024053318Z2OYDOE4XFL",
     "certArn.dev":  "arn:aws:acm:us-east-1:408141212087:certificate/61bf81f2-80b9-414a-ae19-47c42a69a908",
-    "certArn.prod": "arn:aws:acm:us-east-1:408141212087:certificate/a0358f43-89a4-4ad0-a722-82ed52e2b5ff",
+    "certArn.prod": "arn:aws:acm:us-east-1:408141212087:certificate/25066a73-c848-4898-b050-89998a03a4e9",
     "mediaCertArn.dev":  "arn:aws:acm:us-east-1:408141212087:certificate/658f82fa-3d16-49fc-8229-e2cd9dfee974",
-    "mediaCertArn.prod": "arn:aws:acm:us-east-1:408141212087:certificate/9299b623-2df4-4c06-9882-32707f3c89f2",
+    "mediaCertArn.prod": "arn:aws:acm:us-east-1:408141212087:certificate/25066a73-c848-4898-b050-89998a03a4e9",
     "apiCertArn.dev":  "arn:aws:acm:us-east-1:408141212087:certificate/658f82fa-3d16-49fc-8229-e2cd9dfee974",
-    "apiCertArn.prod": "arn:aws:acm:us-east-1:408141212087:certificate/3dcfd8c0-9ad0-4d14-aa39-5ddfdd71b952",
+    "apiCertArn.prod": "arn:aws:acm:us-east-1:408141212087:certificate/25066a73-c848-4898-b050-89998a03a4e9",
     "cloudfrontKeyPairId.dev":  "K1WIG6RJRFSB4I",
     "cloudfrontKeyPairId.prod": "K39EZRF2L5JQV2"
   }
