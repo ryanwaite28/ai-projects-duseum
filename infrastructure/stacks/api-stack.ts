@@ -305,6 +305,7 @@ export class ApiStack extends cdk.Stack {
     grantApiGwInvoke(artworksLambda, 'ArtworksApiGwInvoke')
     const artworksIntegration = makeIntegration('ArtworksIntegration', artworksLambda)
     route('RouteGetArtworks',       'GET /artworks',                  artworksIntegration, 'NONE')
+    route('RouteGetMyArtworks',     'GET /artworks/mine',             artworksIntegration, 'JWT')
     route('RouteGetArtwork',        'GET /artworks/{artworkId}',      artworksIntegration, 'NONE')
     route('RoutePostArtwork',       'POST /artworks',                 artworksIntegration, 'JWT')
     route('RoutePutArtwork',        'PUT /artworks/{artworkId}',      artworksIntegration, 'JWT')

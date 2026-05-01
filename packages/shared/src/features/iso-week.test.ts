@@ -121,20 +121,20 @@ describe('isWithinThreeMonthWindow', () => {
 // ── getEligibleWeeks ──────────────────────────────────────────────────────────
 
 describe('getEligibleWeeks', () => {
-  it('returns an array with length equal to advanceWeeks', () => {
-    expect(getEligibleWeeks(8)).toHaveLength(8)
+  it('returns advanceWeeks + 1 entries (current week + N future weeks)', () => {
+    expect(getEligibleWeeks(8)).toHaveLength(9)
   })
 
-  it('first entry is next week (current + 1)', () => {
+  it('first entry is the current week', () => {
     const current = getCurrentIsoWeek()
     const eligible = getEligibleWeeks(8)
-    expect(eligible[0]).toBe(addWeeks(current, 1))
+    expect(eligible[0]).toBe(current)
   })
 
   it('last entry is current + advanceWeeks', () => {
     const current = getCurrentIsoWeek()
     const eligible = getEligibleWeeks(8)
-    expect(eligible[7]).toBe(addWeeks(current, 8))
+    expect(eligible[8]).toBe(addWeeks(current, 8))
   })
 
   it('all entries are in YYYY-Www format', () => {
@@ -143,8 +143,9 @@ describe('getEligibleWeeks', () => {
     })
   })
 
-  it('returns empty array when advanceWeeks is 0', () => {
-    expect(getEligibleWeeks(0)).toEqual([])
+  it('returns single entry (current week) when advanceWeeks is 0', () => {
+    const current = getCurrentIsoWeek()
+    expect(getEligibleWeeks(0)).toEqual([current])
   })
 
   it('weeks are sequential (each is one week apart)', () => {

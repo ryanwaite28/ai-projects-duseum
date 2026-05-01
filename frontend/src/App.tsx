@@ -71,7 +71,8 @@ function AppRoutes() {
         {/* ── Authenticated ───────────────────────────────────────── */}
         <Route path="/dashboard"              element={<ProtectedRoute><DashboardIndexPage /></ProtectedRoute>} />
         <Route path="/dashboard/viewer"       element={<ProtectedRoute><DashboardViewerPage /></ProtectedRoute>} />
-        <Route path="/dashboard/author"       element={<ProtectedRoute><AuthorDashboardAuthorPage /></ProtectedRoute>} />
+        <Route path="/dashboard/author"       element={<Navigate to="/dashboard/author/overview" replace />} />
+        <Route path="/dashboard/author/:tab"  element={<ProtectedRoute><AuthorDashboardAuthorPage /></ProtectedRoute>} />
         <Route path="/onboarding/author"      element={<ProtectedRoute><AuthorOnboardingPage /></ProtectedRoute>} />
         <Route path="/subscriptions"          element={<ProtectedRoute><SubscriptionsPage /></ProtectedRoute>} />
         <Route path="/subscription/success"   element={<SubscriptionSuccessPage />} />

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { PageLayout } from '../components/layout/PageLayout'
 import { EyebrowLabel } from '../components/ui/EyebrowLabel'
@@ -16,6 +17,12 @@ export default function SubscriptionsPage() {
     mutationFn: () => subscriptionsService.createPortalSession(),
     onSuccess:  (data) => { window.location.href = data.portalUrl },
     onError:    (err: ApiError) => setPortalError(err.message ?? 'Could not open billing portal.'),
+  })
+
+  const upgradeMutation = useMutation({
+    mutationFn: () => subscriptionsService.createPlatformCheckout(),
+    onSuccess:  (data) => { window.location.href = data.checkoutUrl },
+    onError:    (err: ApiError) => setPortalError(err.message ?? 'Could not start checkout.'),
   })
 
   return (
@@ -62,7 +69,14 @@ export default function SubscriptionsPage() {
                   {portalMutation.isPending ? '…' : 'Manage billing'}
                 </Button>
                 {portalError && (
-                  <p className="text-[0.72rem] text-[#c0544a]">{portalError}</p>
+                  <div className="text-right">
+                    <p className="text-[0.72rem] text-[#c0544a]">{portalError}</p>
+                    {portalError.includes('Subscribe') && (
+                      <Link to="/settings/subscriptions" className="text-[0.72rem] text-gold hover:text-gold-light underline">
+                        Subscribe now →
+                      </Link>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -74,8 +88,8 @@ export default function SubscriptionsPage() {
                   Upgrade to unlock the full collection.
                 </p>
               </div>
-              <Button variant="primary" onClick={() => { setPortalError(null); portalMutation.mutate() }} disabled={portalMutation.isPending}>
-                {portalMutation.isPending ? '…' : 'Upgrade'}
+              <Button variant="primary" onClick={() => { setPortalError(null); upgradeMutation.mutate() }} disabled={upgradeMutation.isPending}>
+                {upgradeMutation.isPending ? '…' : 'Upgrade'}
               </Button>
             </div>
           )}

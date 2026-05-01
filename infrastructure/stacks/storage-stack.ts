@@ -130,6 +130,15 @@ export class StorageStack extends cdk.Stack {
       removalPolicy,
     })
 
+    // ── GSI-AuthorDirectory ───────────────────────────────────────────────────
+    // Paginated author directory — profileType = 'AUTHOR', sorted by createdAt (FR-DISC-04)
+    this.mainTable.addGlobalSecondaryIndex({
+      indexName: 'GSI-AuthorDirectory',
+      partitionKey: { name: 'profileType', type: dynamodb.AttributeType.STRING },
+      sortKey:      { name: 'createdAt',   type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    })
+
     // ── GSI-AuthorPublic ──────────────────────────────────────────────────────
     // Browse an Author's public pieces in chronological order
     this.mainTable.addGlobalSecondaryIndex({

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { PageLayout } from '../../components/layout/PageLayout'
@@ -8,6 +8,30 @@ import { Button } from '../../components/ui/Button'
 import { useMe, useMeQueryKey } from '../../hooks/use-me'
 import { useAuthStore } from '../../store/auth.store'
 import { api } from '../../services/api'
+
+// ── Shareable link copy button ────────────────────────────────────────────────
+
+function CopyLinkButton({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }, [url])
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="shrink-0 text-[0.72rem] font-medium tracking-[0.1em] uppercase text-gold border border-gold/30 hover:border-gold/70 hover:bg-gold/8 px-3 py-1.5 rounded-sm transition-colors duration-150"
+    >
+      {copied ? 'Copied!' : 'Copy'}
+    </button>
+  )
+}
+
+// ── Account settings form ─────────────────────────────────────────────────────
 
 function AccountSettings() {
   const { user } = useAuthStore()
@@ -123,8 +147,45 @@ function AccountSettings() {
             </Link>
           </div>
 
+          {/* Shareable profile links — Author only (FR-AUTH-PROF-07) */}
+          {me?.authorProfile && user && (
+            <div className="mt-16 pt-8 border-t border-gold/10">
+              <p className="text-[0.68rem] font-medium tracking-[0.2em] uppercase text-gold mb-4">
+                Share Your Profile
+              </p>
+              <h2 className="font-display text-[1.2rem] font-normal text-warm-white mb-6">
+                Public links
+              </h2>
+              <div className="space-y-3">
+                {[
+                  {
+                    label: 'Profile page',
+                    url: `${window.location.origin}/authors/${user.userId}`,
+                  },
+                  {
+                    label: 'Public gallery',
+                    url: `${window.location.origin}/authors/${user.userId}?tab=gallery`,
+                  },
+                ].map(({ label, url }) => (
+                  <div
+                    key={label}
+                    className="flex items-center gap-3 px-4 py-3 bg-ink-soft border border-gold/15 rounded-sm"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[0.72rem] font-medium tracking-[0.12em] uppercase text-stone-light mb-0.5">
+                        {label}
+                      </p>
+                      <p className="text-[0.82rem] font-light text-parchment-dim truncate">{url}</p>
+                    </div>
+                    <CopyLinkButton url={url} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Nav to other settings */}
-          <div className="mt-16 pt-8 border-t border-gold/10 flex flex-wrap gap-3">
+          <div className="mt-10 pt-8 border-t border-gold/10 flex flex-wrap gap-3">
             <Link to="/settings/notifications">
               <Button variant="secondary">Notification Preferences</Button>
             </Link>

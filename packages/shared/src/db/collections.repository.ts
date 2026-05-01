@@ -58,8 +58,8 @@ export const createCollection = async (
           ...authorCollectionKey(ownerId, createdAt, collectionId),
           collectionId,
           ownerId,
-          title: collection.title,
-          isPublic: collection.isPublic,
+          title:      collection.title,
+          visibility: collection.visibility,
           createdAt,
         },
       })
@@ -78,7 +78,7 @@ export const getCollection = async (
 }
 
 export type ListCollectionsByAuthorOptions = {
-  publicOnly?: boolean
+  visibilityFilter?: 'FREE' | 'SUBSCRIBER_ONLY'
   limit?: number
   lastKey?: Record<string, unknown>
 }
@@ -88,17 +88,18 @@ export const listCollectionsByAuthor = async (
   authorId: string,
   opts: ListCollectionsByAuthorOptions = {}
 ): Promise<{ items: Collection[]; lastKey?: Record<string, unknown> }> => {
-  const { publicOnly = true, limit = 20, lastKey } = opts
+  const { visibilityFilter, limit = 20, lastKey } = opts
 
   const result = await client.send(
     new QueryCommand({
       TableName: TABLE_NAME,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
-      FilterExpression: publicOnly ? 'isPublic = :yes' : undefined,
+      FilterExpression: visibilityFilter ? '#vis = :vis' : undefined,
+      ExpressionAttributeNames: visibilityFilter ? { '#vis': 'visibility' } : undefined,
       ExpressionAttributeValues: {
         ':pk': `AUTHOR#${authorId}`,
         ':prefix': 'COLLECTION#',
-        ...(publicOnly && { ':yes': true }),
+        ...(visibilityFilter && { ':vis': visibilityFilter }),
       },
       ScanIndexForward: false,
       Limit: limit,
@@ -123,14 +124,13 @@ export const listCollectionsByAuthor = async (
 export const updateCollection = async (
   client: DynamoDBDocumentClient,
   collectionId: string,
-  patch: { title?: string; description?: string; isPublic?: boolean }
+  patch: { title?: string; description?: string }
 ): Promise<Collection> => {
   const sets: string[] = ['updatedAt = :updatedAt']
   const values: Record<string, unknown> = { ':updatedAt': new Date().toISOString() }
 
   if (patch.title !== undefined) { sets.push('title = :title'); values[':title'] = patch.title }
   if (patch.description !== undefined) { sets.push('description = :description'); values[':description'] = patch.description }
-  if (patch.isPublic !== undefined) { sets.push('isPublic = :isPublic'); values[':isPublic'] = patch.isPublic }
 
   const result = await client.send(
     new UpdateCommand({

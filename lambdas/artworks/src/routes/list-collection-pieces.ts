@@ -29,8 +29,8 @@ export const listCollectionPiecesRoute = async (
   const collection = await getCollection(docClient, collectionId)
   if (!collection) throw new NotFoundError('Collection not found')
 
-  if (!collection.isPublic && collection.ownerId !== userId) {
-    throw new ForbiddenError('Only the collection owner may list pieces in a private collection')
+  if (collection.visibility === 'SUBSCRIBER_ONLY' && collection.ownerId !== userId) {
+    throw new ForbiddenError('Only the collection owner may list pieces in a subscriber-only collection')
   }
 
   const result = await listCollectionItems(docClient, collectionId, 100)
