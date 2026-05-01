@@ -117,6 +117,7 @@ export class ApiStack extends cdk.Stack {
       CLOUDFRONT_KEY_PAIR_ID:   cloudfrontKeyPairId,
       COGNITO_USER_POOL_ID:     userPoolId,
       COGNITO_CLIENT_ID:        userPoolClientId,
+      APP_BASE_URL:             isProd ? 'https://duseum.com' : `https://${envName}.duseum.com`,
     }
 
     // ── Common DynamoDB main table CRUD policy ────────────────────────────────
