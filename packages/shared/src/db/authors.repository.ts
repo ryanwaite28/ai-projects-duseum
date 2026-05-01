@@ -52,7 +52,7 @@ export const listAuthors = async (
   let items = (result.Items ?? []) as AuthorProfile[]
 
   if (sort === 'subscriberCount') {
-    items = items.slice().sort((a, b) => b.subscriberCount - a.subscriberCount)
+    items = items.slice().sort((a, b) => (b.subscriberCount ?? 0) - (a.subscriberCount ?? 0))
   }
 
   return { items, lastKey: result.LastEvaluatedKey as Record<string, unknown> | undefined }

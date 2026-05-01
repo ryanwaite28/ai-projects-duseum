@@ -10,7 +10,7 @@
 // =============================================================================
 
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
-import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
 import type { AuthorProfile, NotificationPref, UserAccount, ViewerProfile } from '../types/index.js'
 import { TABLE_NAME } from './client.js'
@@ -240,57 +240,6 @@ export const updateAuthorProfile = async (
     })
   )
   return result.Attributes as AuthorProfile
-}
-
-// ── Author directory ──────────────────────────────────────────────────────────
-
-export type ListAuthorsSort = 'newest' | 'subscriberCount'
-
-export interface ListAuthorsOptions {
-  sort:      ListAuthorsSort
-  limit:     number
-  lastKey?:  Record<string, unknown>
-}
-
-export interface ListAuthorsResult {
-  items:   AuthorProfile[]
-  lastKey: Record<string, unknown> | undefined
-}
-
-/**
- * Paginated Author directory via GSI-AuthorDirectory.
- * - 'newest': GSI scan (ScanIndexForward=false) — createdAt DESC
- * - 'subscriberCount': same scan, sorted in application layer after fetching
- * Only ACTIVE authors are returned (SUSPENDED/DEACTIVATED filtered out).
- */
-export const listAuthors = async (
-  client: DynamoDBDocumentClient,
-  opts: ListAuthorsOptions
-): Promise<ListAuthorsResult> => {
-  const result = await client.send(
-    new QueryCommand({
-      TableName:                 TABLE_NAME,
-      IndexName:                 'GSI-AuthorDirectory',
-      KeyConditionExpression:    'profileType = :author',
-      FilterExpression:          '#status = :active',
-      ExpressionAttributeNames:  { '#status': 'status' },
-      ExpressionAttributeValues: { ':author': 'AUTHOR', ':active': 'ACTIVE' },
-      ScanIndexForward:          false,
-      Limit:                     opts.limit,
-      ExclusiveStartKey:         opts.lastKey,
-    })
-  )
-
-  let items = (result.Items ?? []) as AuthorProfile[]
-
-  if (opts.sort === 'subscriberCount') {
-    items = [...items].sort((a, b) => (b.subscriberCount ?? 0) - (a.subscriberCount ?? 0))
-  }
-
-  return {
-    items,
-    lastKey: result.LastEvaluatedKey as Record<string, unknown> | undefined,
-  }
 }
 
 export const incrementAuthorFollowerCount = async (
