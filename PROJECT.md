@@ -2597,6 +2597,7 @@ STRIPE_SECRET_KEY       # Read from Secrets Manager at runtime (never env var)
 STRIPE_WEBHOOK_QUEUE_URL # duseum-{env}-sqs-stripe-webhooks (for webhook lambda)
 COGNITO_USER_POOL_ID
 COGNITO_CLIENT_ID
+APP_BASE_URL           # https://duseum.com (prod) | https://dev.duseum.com (dev) — used for Stripe Connect return/refresh URLs
 # maintenance-lambda only:
 DAILY_FEATURE_RULE_NAME  # duseum-{env}-eventbridge-daily-featured-author
 WEEKLY_ROTATION_RULE_NAME # duseum-{env}-eventbridge-weekly-feature-rotation

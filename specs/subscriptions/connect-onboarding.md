@@ -10,7 +10,7 @@
 
 **Done when**:
 - [ ] `POST /subscriptions/connect/onboard` creates Connect account and writes both `PROFILE#AUTHOR` field and `CONNECT#{id}/META` reverse-lookup record in parallel
-- [ ] `return_url` and `refresh_url` use `APP_BASE_URL` env var (not hardcoded `https://duseum.com`)
+- [x] `return_url` and `refresh_url` use `APP_BASE_URL` env var (not hardcoded `https://duseum.com`)
 - [ ] `GET /subscriptions/connect/status` reads DynamoDB cache before calling Stripe API; Stripe only called on cache miss
 - [ ] `detailsSubmitted` field fixed to not reuse `connectChargesEnabled` value (known issue in spec)
 - [ ] Spec `**Status**` updated to ✅ Implemented
