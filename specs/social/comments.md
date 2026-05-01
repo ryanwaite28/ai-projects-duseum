@@ -1,6 +1,6 @@
 ## Spec: Comments
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-SOC-02, FR-SOC-03, FR-SOC-04, FR-SOC-05, FR-AUTH-PROF-09
 **Relevant PROJECT.md sections**: 2.9, 4.2, 8
 
@@ -9,11 +9,11 @@
 **Prerequisites**: `artworks/artwork-crud.md` and `artworks/access-control.md` complete; `social-lambda` deployed; `packages/shared/src/db/social.repository.ts` created
 
 **Done when**:
-- [ ] Reply to a reply (depth > 1) returns 400; `parentCommentId` must be a top-level comment
-- [ ] `commentCount` on ArtPiece increments on create (atomic); does not go negative on soft-delete
-- [ ] Max 2 pinned comments enforced: third pin attempt returns 409; pinning already-pinned is idempotent → 200
-- [ ] Delete by non-owner, non-Author-of-piece, non-Admin → 403
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] Reply to a reply (depth > 1) returns 400; `parentCommentId` must be a top-level comment
+- [x] `commentCount` on ArtPiece increments on create (atomic); does not go negative on soft-delete
+- [x] Max 2 pinned comments enforced: third pin attempt returns 409; pinning already-pinned is idempotent → 200
+- [x] Delete by non-owner, non-Author-of-piece, non-Admin → 403
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `lambdas/social/src/routes/create-comment.ts` — `POST /comments`

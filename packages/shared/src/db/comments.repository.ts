@@ -274,6 +274,23 @@ export const getParentComment = async (
 }
 
 /**
+ * Returns the number of currently pinned comments on an artwork (0, 1, or 2).
+ */
+export const countPinnedComments = async (
+  client: DynamoDBDocumentClient,
+  artworkId: string
+): Promise<number> => {
+  const result = await client.send(new QueryCommand({
+    TableName:                 TABLE_NAME,
+    KeyConditionExpression:    'PK = :pk AND begins_with(SK, :prefix)',
+    FilterExpression:          'isPinned = :t',
+    ExpressionAttributeValues: { ':pk': `ARTWORK#${artworkId}`, ':prefix': 'COMMENT#', ':t': true },
+    Select:                    'COUNT',
+  }))
+  return result.Count ?? 0
+}
+
+/**
  * Deletes both the shadow lookup item and the real comment item.
  * Used for hard deletes (admin/cleanup path) — not used in the soft-delete route.
  */

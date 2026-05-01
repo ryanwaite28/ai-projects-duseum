@@ -4,7 +4,6 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
 import type { DuseumContext } from '@duseum/shared'
 import {
-  NotFoundError,
   UnauthorizedError,
   docClient,
   getUserReaction,
@@ -20,7 +19,7 @@ export const deleteReactionRoute = async (
   if (!context.userId) throw new UnauthorizedError()
 
   const existing = await getUserReaction(docClient, artworkId, context.userId)
-  if (!existing) throw new NotFoundError('No reaction found for this artwork')
+  if (!existing) return noContent()
 
   await deleteReaction(docClient, artworkId, context.userId, existing.reactionType)
 

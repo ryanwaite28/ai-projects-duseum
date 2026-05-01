@@ -1,6 +1,6 @@
 ## Spec: Notification Preferences Management
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-VIEW-09, FR-VIEW-10, FR-NOTIF-08
 **Relevant PROJECT.md sections**: 2.3, 2.12, 8
 
@@ -9,10 +9,10 @@
 **Prerequisites**: `users/follows.md` complete; unsubscribe HMAC secret in Secrets Manager at `duseum/{env}/notifications/unsubscribe-secret`
 
 **Done when**:
-- [ ] `PUT /users/me/notification-preferences` updates `notificationPreference` on specified Follow records; global opt-out sets `globalNotificationOptOut=true` on User META record
-- [ ] `POST /users/unsubscribe` validates HMAC token; rejects expired tokens → 400; sets preference=`NONE` on valid token
-- [ ] Unsubscribe for non-existent follow → 200 (idempotent no-op)
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] `PUT /users/me/notification-preferences` updates `notificationPreference` on specified Follow records; global opt-out sets `globalNotificationOptOut=true` on User META record
+- [x] `POST /users/unsubscribe` validates HMAC token; rejects expired tokens → 400; sets preference=`NONE` on valid token
+- [x] Unsubscribe for non-existent follow → 200 (idempotent no-op)
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `lambdas/users/src/routes/update-notification-prefs.ts` — `PUT /users/me/notification-preferences`

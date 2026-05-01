@@ -1,6 +1,6 @@
 ## Spec: Follow / Unfollow Authors
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-VIEW-06, FR-VIEW-06a, FR-SOC-06
 **Relevant PROJECT.md sections**: 2.3, 2.9, 4.7, 8
 
@@ -9,11 +9,11 @@
 **Prerequisites**: `users/author-onboarding.md` complete; `packages/shared/src/db/follows.repository.ts` created; Follow record schema (`PK=USER#{viewerId}, SK=FOLLOW#AUTHOR#{authorId}`) finalized
 
 **Done when**:
-- [ ] `POST /users/{authorId}/follow` writes Follow record + increments Author `followerCount` atomically; second follow is idempotent (no double-increment)
-- [ ] Self-follow returns 400; follow non-existent Author returns 404; inactive Viewer profile returns 403
-- [ ] `DELETE /users/{authorId}/follow` removes record + decrements count; no-op if record doesn't exist → 200
-- [ ] `GET /users/me/follows` returns paginated list of followed Authors
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] `POST /users/{authorId}/follow` writes Follow record + increments Author `followerCount` atomically; second follow is idempotent (no double-increment)
+- [x] Self-follow returns 400; follow non-existent Author returns 404; inactive Viewer profile returns 403
+- [x] `DELETE /users/{authorId}/follow` removes record + decrements count; no-op if record doesn't exist → 200
+- [x] `GET /users/me/follows` returns paginated list of followed Authors
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `lambdas/users/src/routes/follow-author.ts` — `POST /users/{authorId}/follow`

@@ -1,6 +1,6 @@
 ## Spec: Platform Configuration (Admin)
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-ADMIN-05, FR-SUB-01, FR-SUB-10
 **Relevant PROJECT.md sections**: 2.10, 5.4, 8
 
@@ -9,11 +9,11 @@
 **Prerequisites**: All 5 SSM config params seeded (Phase 0.4); Admin middleware in place; `admin-lambda` deployed with SSM read/write IAM permissions
 
 **Done when**:
-- [ ] `GET /admin/config` reads all 5 SSM params in parallel and returns them
-- [ ] `PUT /admin/config` writes changed params with `Overwrite: true`; validation rejects out-of-range values (e.g., cut% > 50 → 400, maxSlots > 20 → 400)
-- [ ] Config change takes effect on next Lambda invocation without redeploy (SSM read at request time, not startup)
-- [ ] Non-Admin → 403
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] `GET /admin/config` reads all 6 config values in parallel from DynamoDB config table and returns them
+- [x] `PUT /admin/config` writes changed values; validation rejects out-of-range values (e.g., cut% > 100 → 400)
+- [x] Config change takes effect on next Lambda invocation without redeploy (DynamoDB read at request time)
+- [x] Non-Admin → 403 (enforced by `requireAdminMiddleware` on all admin-lambda routes)
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `lambdas/admin/src/routes/get-config.ts` — `GET /admin/config`

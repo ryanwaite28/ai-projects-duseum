@@ -24,6 +24,7 @@ import {
   getAuthorSubscription,
   getFreeTierLimit,
   getPlatformSubscription,
+  getUserReaction,
   incrementViewCount,
   ok,
   publicUrl,
@@ -87,19 +88,20 @@ export const getArtwork = async (
   // Increment view count — fire-and-forget, never blocks response
   void incrementViewCount(docClient, artworkId).catch(() => {/* swallow — non-critical */})
 
-  let imageUrl: string
-  let imageUrlExpiresAt: string | undefined
-
-  if (decision.signUrl) {
-    imageUrl          = await generateSignedUrl(piece.s3Key, SIGNED_URL_TTL)
-    imageUrlExpiresAt = new Date(Date.now() + SIGNED_URL_TTL * 1000).toISOString()
-  } else {
-    imageUrl = publicUrl(piece.s3Key)
-  }
+  const [imageResolved, viewerReactionRecord] = await Promise.all([
+    decision.signUrl
+      ? generateSignedUrl(piece.s3Key, SIGNED_URL_TTL).then(url => ({
+          imageUrl:          url,
+          imageUrlExpiresAt: new Date(Date.now() + SIGNED_URL_TTL * 1000).toISOString(),
+        }))
+      : Promise.resolve({ imageUrl: publicUrl(piece.s3Key), imageUrlExpiresAt: undefined }),
+    userId ? getUserReaction(docClient, artworkId, userId) : Promise.resolve(null),
+  ])
 
   return ok({
     ...piece,
-    imageUrl,
-    ...(imageUrlExpiresAt ? { imageUrlExpiresAt } : {}),
+    imageUrl:          imageResolved.imageUrl,
+    ...(imageResolved.imageUrlExpiresAt ? { imageUrlExpiresAt: imageResolved.imageUrlExpiresAt } : {}),
+    viewerReaction:    viewerReactionRecord?.reactionType ?? null,
   })
 }

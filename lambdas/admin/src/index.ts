@@ -12,6 +12,7 @@
 //   PUT    /admin/users/{userId}/profiles/{type}/suspend       → suspendProfile
 //   DELETE /admin/artworks/{artworkId}                         → removeArtwork
 //   DELETE /admin/comments/{commentId}                         → hideComment
+//   GET    /admin/config                                        → getConfig
 //   PUT    /admin/config                                        → updateConfig
 //   GET    /admin/dashboard                                     → adminDashboard
 //   PUT    /admin/features/daily/override                       → overrideDailyFeature
@@ -38,6 +39,7 @@ import { reinstateUser }        from './routes/reinstate-user.js'
 import { suspendProfile }       from './routes/suspend-profile.js'
 import { removeArtwork }        from './routes/remove-artwork.js'
 import { hideComment }          from './routes/hide-comment.js'
+import { getConfig }            from './routes/get-config.js'
 import { updateConfig }         from './routes/update-config.js'
 import { adminDashboard }       from './routes/admin-dashboard.js'
 
@@ -68,6 +70,7 @@ const dispatch = async (
   if (seg1 === 'comments' && seg2 && method === 'DELETE')               return hideComment(event, context, seg2)
 
   // ── Platform config ────────────────────────────────────────────────────────
+  if (seg1 === 'config'    && method === 'GET')                         return getConfig(event, context)
   if (seg1 === 'config'    && method === 'PUT')                         return updateConfig(event, context)
   if (seg1 === 'dashboard' && method === 'GET')                         return adminDashboard(event, context)
 

@@ -3,6 +3,7 @@
 // features-lambda entry point — Section 4.2, 8.9
 //
 // Routes:
+//   GET  /features/homepage                → getHomepage        (public)
 //   GET  /features/daily                   → getDailyFeature    (public)
 //   GET  /features/weekly                  → getWeeklyFeature   (public)
 //   GET  /features/weekly/availability     → getWeeklyAvailability (public)
@@ -19,6 +20,7 @@ import {
   loggerMiddleware,
 } from '@duseum/shared'
 import type { DuseumContext } from '@duseum/shared'
+import { getHomepage }              from './routes/get-homepage.js'
 import { getDailyFeature }          from './routes/get-daily.js'
 import { getWeeklyFeature }         from './routes/get-weekly.js'
 import { getWeeklyAvailability }    from './routes/get-weekly-availability.js'
@@ -34,6 +36,10 @@ const dispatch = async (
   const [seg0, seg1, seg2] = segments
 
   if (seg0 !== 'features') throw new NotFoundError()
+
+  if (seg1 === 'homepage' && method === 'GET') {
+    return getHomepage()
+  }
 
   if (seg1 === 'daily' && method === 'GET') {
     return getDailyFeature(event, context)

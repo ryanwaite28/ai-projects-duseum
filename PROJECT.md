@@ -182,15 +182,15 @@ To give artists a beautiful, museum-quality space to share their work — and to
 
 ### 2.8 Discovery & Browse
 
-- **FR-DISC-01**: Public homepage shows: **Daily Featured Author** (randomly selected by the platform each day, free), **Weekly Featured Authors** (up to 10 paid slots, rotates every Monday), recently published pieces (paginated), trending pieces (by view + reaction velocity)
-- **FR-DISC-02**: Browse page with filters: category/medium, tags, sort (newest, trending, most-viewed)
-- **FR-DISC-03**: Search: full-text search across art piece titles, descriptions, tags, and author names (powered by DynamoDB + Lambda, or optionally OpenSearch in a future phase)
+- **FR-DISC-01**: Public homepage shows: **Daily Featured Author** (randomly selected by the platform each day, free), **Weekly Featured Authors** (up to 10 paid slots, rotates every Monday), recently published pieces (paginated). *(Trending pieces deferred — requires trendScore GSI not yet provisioned.)*
+- **FR-DISC-02**: Browse page with filters: category/medium, tags, sort (`newest` only in v1). *(sort=trending and sort=most-viewed deferred — require trendScore/viewCount GSIs.)*
+- **FR-DISC-03**: Search deferred to a future phase. *(Full-text search requires OpenSearch or a scan-based approach that conflicts with the no-full-scan rule.)*
 - **FR-DISC-04**: Author directory: paginated list of all Authors, sortable by subscriber count and newest
-- **FR-DISC-05**: Piece detail page: full-resolution image (CloudFront-served), metadata, Author info, comment thread, reactions, related pieces (same Author, same tags)
+- **FR-DISC-05**: Piece detail page: full-resolution image (CloudFront-served), metadata, Author info, reactions. *(Comment thread and related pieces on detail page deferred — add in frontend integration phase.)*
 
 ### 2.9 Social Interactions
 
-- **FR-SOC-01**: Viewers can react to art pieces with one of: `LOVE`, `WOW`, `FIRE`, `INSPIRED` (one reaction per user per piece; changing reaction replaces previous)
+- **FR-SOC-01**: Viewers can react to art pieces with one of: `LOVE`, `WOW`, `FIRE`, `INSPIRED` (one reaction per user per piece; changing reaction replaces previous). Reaction counts and the authenticated viewer's current reaction (`viewerReaction`) are returned as part of `GET /artworks/{artworkId}` — there is no separate reactions read endpoint. Access is enforced at the artwork read layer; `PUT`/`DELETE /artworks/{artworkId}/reactions` only verify the piece exists.
 - **FR-SOC-02**: Viewers can comment on art pieces (Author can disable comments per piece); max 1,000 chars per comment
 - **FR-SOC-03**: Authors can reply to comments; one level of nesting only (no nested replies to replies)
 - **FR-SOC-04**: Authors can pin/unpin comments on their pieces (up to 2 pinned per piece)
@@ -376,7 +376,7 @@ Each Lambda function handles a cohesive route group. Functions are **thin handle
 | `subscriptions-webhook-lambda` | — | SQS (from Stripe webhook SQS queue) | Process Stripe subscription events AND weekly feature Payment Intent events; update state in DynamoDB; idempotent via idempotency table |
 | `notifications-lambda` | — | SQS (from notification queue) | Fan-out new-piece email notifications to followers via SES; pages through Follow records; respects per-Viewer notification preferences and global opt-out; logs delivery summary count back to DynamoDB |
 | `features-lambda` | `GET /features/*`, `POST /features/weekly/book` | API GW | Read Daily Featured Author; read current/upcoming Weekly Featured Authors; book a weekly feature slot (eligibility check + Stripe Payment Intent creation) |
-| `social-lambda` | `/comments/*`, `/reactions/*` | API GW | Comments and reactions CRUD |
+| `social-lambda` | `/comments/*`, `PUT /artworks/*/reactions`, `DELETE /artworks/*/reactions` | API GW | Comments and reactions CRUD |
 | `admin-lambda` | `/admin/*` | API GW | Admin operations (requires ADMIN Cognito group) |
 | `auth-triggers-lambda` | — | Cognito Post-Confirmation trigger | Auto-create Viewer profile on email verification |
 | `media-lambda` | `POST /media/upload-intent` | API GW | Generate S3 presigned PUT URLs for art piece uploads; confirm upload |
@@ -1783,6 +1783,7 @@ Get a single art piece. Returns signed URL for private pieces if caller has acce
   "visibility": "PRIVATE",
   "viewCount": 88,
   "reactionCounts": { "LOVE": 15 },
+  "viewerReaction": "LOVE",
   "commentCount": 3,
   "commentsEnabled": true,
   "notifiedCount": 124,
