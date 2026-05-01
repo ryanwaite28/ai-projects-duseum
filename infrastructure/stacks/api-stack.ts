@@ -439,7 +439,10 @@ export class ApiStack extends cdk.Stack {
           sid: 'WebhookSecret',
           effect: iam.Effect.ALLOW,
           actions: ['secretsmanager:GetSecretValue'],
-          resources: [secretArn(this, envName, `duseum/${envName}/stripe/webhook-secret`)],
+          resources: [
+            secretArn(this, envName, `duseum/${envName}/stripe/webhook-secret`),
+            secretArn(this, envName, `duseum/${envName}/stripe/webhook-secret-account`),
+          ],
         }),
         new iam.PolicyStatement({
           sid: 'WebhookStripeKey',
