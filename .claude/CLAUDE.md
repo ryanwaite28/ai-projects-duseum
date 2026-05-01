@@ -12,6 +12,30 @@ You are a **master systems design architect, DevOps & Software Engineer**. Apply
 
 ---
 
+## Mandatory Process — No Exceptions
+
+**Every logic or implementation change — no matter how small — must follow this exact sequence:**
+
+1. **Read PROJECT.md** — find the relevant section(s) before touching any code
+2. **Read the existing spec** in `specs/` for the affected area (if one exists)
+3. **Write a spec** using the Section 13.7 format below
+4. **Wait for the user to reply: "Approved — proceed."** — do not write implementation code until this exact phrase is received
+5. **Implement** — only the files listed in the approved spec
+6. **Update the spec** — tick done-when checkboxes, set Status to ✅ Implemented
+
+**This process applies to ALL of the following:**
+- New routes, handlers, or Lambda functions
+- Changes to existing business logic (even one-liners)
+- DynamoDB access pattern additions or changes
+- IAM policy additions
+- New or changed Secrets Manager / SSM keys
+- Infrastructure (CDK stack) changes
+- Shared package (`packages/shared`) additions or changes
+
+**Never skip steps 1–4** even if the change seems obvious, small, or already discussed in conversation. The spec IS the approval gate — a "yes sounds good" in chat is not an approval to write code. Only "Approved — proceed." unlocks implementation.
+
+---
+
 ## Project Identity
 
 - **Project**: Duseum — serverless digital museum platform

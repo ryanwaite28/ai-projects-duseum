@@ -27,10 +27,11 @@
 **Business logic**:
 1. `POST /subscriptions/connect/onboard`:
    - Validate Author profile exists + status=`ACTIVE`
-   - If no `stripeConnectAccountId`: create Stripe Connect Express account
+   - If no `stripeConnectAccountId`: create Stripe Connect Express account with `business_type: 'individual'` — removes business website/email fields from Stripe's onboarding UI
    - Create Stripe Account Link with:
      - `return_url = APP_BASE_URL + /dashboard/author?connect=return`
      - `refresh_url = APP_BASE_URL + /dashboard/author?connect=refresh`
+     - `collection_options: { fields: 'currently_due' }` — Stripe only prompts for fields required to enable payouts now; optional fields deferred
    - Write Connect account ID to Author profile (parallel write of reverse-lookup record `CONNECT#…/META`)
    - Return: `{ onboardingUrl }` — frontend redirects Author to Stripe
 2. `GET /subscriptions/connect/status`:
