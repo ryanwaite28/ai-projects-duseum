@@ -413,6 +413,7 @@ if $LOCAL_MODE; then
 
   ms_upsert_secret "duseum/local/stripe/secret-key"             "sk_test_REPLACE_WITH_YOUR_TEST_KEY"
   ms_upsert_secret "duseum/local/stripe/webhook-secret"         "whsec_REPLACE_WITH_YOUR_WEBHOOK_SECRET"
+  ms_upsert_secret "duseum/local/stripe/webhook-secret-account" "whsec_REPLACE_WITH_YOUR_ACCOUNT_WEBHOOK_SECRET"
   ms_upsert_secret "duseum/local/stripe/connect-client-id"      "ca_REPLACE_WITH_YOUR_CONNECT_CLIENT_ID"
   ms_upsert_secret "duseum/local/ses/from-address"              "no-reply@duseum.com"
   ms_upsert_secret "duseum/local/notifications/unsubscribe-secret" "local-dev-unsubscribe-hmac-secret-32chars"
@@ -901,8 +902,10 @@ fi
 # Validate required secret env vars
 : "${DEV_STRIPE_SK:?DEV_STRIPE_SK is not set — add it to scripts/.secrets.env}"
 : "${DEV_STRIPE_WHSEC:?DEV_STRIPE_WHSEC is not set}"
+: "${DEV_STRIPE_WHSEC_ACCOUNT:?DEV_STRIPE_WHSEC_ACCOUNT is not set — add it to scripts/.secrets.env}"
 : "${PROD_STRIPE_SK:?PROD_STRIPE_SK is not set}"
 : "${PROD_STRIPE_WHSEC:?PROD_STRIPE_WHSEC is not set}"
+: "${PROD_STRIPE_WHSEC_ACCOUNT:?PROD_STRIPE_WHSEC_ACCOUNT is not set}"
 
 # ─── Verify AWS credentials ────────────────────────────────────────────────────
 step "Verifying AWS credentials"
@@ -1012,9 +1015,10 @@ policy_attached() {
 step "Secrets Manager — DEV"
 
 # Stripe (always update — keys may rotate)
-upsert_secret "duseum/dev/stripe/secret-key"       "$DEV_STRIPE_SK"               "dev"
-upsert_secret "duseum/dev/stripe/webhook-secret"   "$DEV_STRIPE_WHSEC"            "dev"
-upsert_secret "duseum/dev/stripe/connect-client-id" "$DEV_STRIPE_CONNECT_CLIENT_ID" "dev"
+upsert_secret "duseum/dev/stripe/secret-key"              "$DEV_STRIPE_SK"                "dev"
+upsert_secret "duseum/dev/stripe/webhook-secret"          "$DEV_STRIPE_WHSEC"             "dev"
+upsert_secret "duseum/dev/stripe/webhook-secret-account"  "$DEV_STRIPE_WHSEC_ACCOUNT"     "dev"
+upsert_secret "duseum/dev/stripe/connect-client-id"       "$DEV_STRIPE_CONNECT_CLIENT_ID" "dev"
 
 # Stable values (create once — never overwrite)
 create_secret_once "duseum/dev/ses/from-address" "$SES_FROM_ADDRESS" "dev"
@@ -1027,9 +1031,10 @@ create_secret_once "duseum/dev/notifications/unsubscribe-secret" "$(openssl rand
 # ═══════════════════════════════════════════════════════════════════════════════
 step "Secrets Manager — PROD"
 
-upsert_secret "duseum/prod/stripe/secret-key"       "$PROD_STRIPE_SK"               "prod"
-upsert_secret "duseum/prod/stripe/webhook-secret"   "$PROD_STRIPE_WHSEC"            "prod"
-upsert_secret "duseum/prod/stripe/connect-client-id" "$PROD_STRIPE_CONNECT_CLIENT_ID" "prod"
+upsert_secret "duseum/prod/stripe/secret-key"             "$PROD_STRIPE_SK"                "prod"
+upsert_secret "duseum/prod/stripe/webhook-secret"         "$PROD_STRIPE_WHSEC"             "prod"
+upsert_secret "duseum/prod/stripe/webhook-secret-account" "$PROD_STRIPE_WHSEC_ACCOUNT"     "prod"
+upsert_secret "duseum/prod/stripe/connect-client-id"      "$PROD_STRIPE_CONNECT_CLIENT_ID" "prod"
 
 create_secret_once "duseum/prod/ses/from-address" "$SES_FROM_ADDRESS" "prod"
 create_secret_once "duseum/prod/notifications/unsubscribe-secret" "$(openssl rand -hex 32)" "prod"

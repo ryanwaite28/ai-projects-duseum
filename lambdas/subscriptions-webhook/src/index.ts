@@ -21,6 +21,7 @@ import {
   checkProcessed,
   constructWebhookEvent,
   docClient,
+  getStripeAccountWebhookSecret,
   getStripeWebhookSecret,
   markProcessed,
 } from '@duseum/shared'
@@ -76,9 +77,18 @@ export const handler = async (sqsEvent: SQSEvent): Promise<SQSBatchResponse> => 
         continue
       }
 
-      // 2. Verify Stripe signature
-      const webhookSecret = await getStripeWebhookSecret()
-      const event = constructWebhookEvent(rawBody, stripeSignature, webhookSecret)
+      // 2. Verify Stripe signature — try Account webhook secret first (platform events),
+      //    fall back to Connect webhook secret (account.updated from Express accounts).
+      //    Two separate Stripe endpoint registrations point to the same URL; we cannot
+      //    know which signing secret applies until we attempt verification.
+      let event: ReturnType<typeof constructWebhookEvent>
+      try {
+        const accountSecret = await getStripeAccountWebhookSecret()
+        event = constructWebhookEvent(rawBody, stripeSignature, accountSecret)
+      } catch {
+        const connectSecret = await getStripeWebhookSecret()
+        event = constructWebhookEvent(rawBody, stripeSignature, connectSecret)
+      }
       eventId = event.id
 
       logger.appendKeys({ stripeEventId: eventId, stripeEventType: event.type })

@@ -30,8 +30,10 @@ These resources already exist in account `408141212087`. Reference them, never r
 | ACM certificates (us-east-1) | ✅ Exists | `Certificate.fromCertificateArn(this, 'Cert', certArn)` — ARN from SSM/context |
 | SES domain verification for `duseum.com` | ✅ Exists | No CDK action needed |
 | SES email identity `no-reply@duseum.com` | ✅ Exists | No CDK action needed |
-| Stripe webhook endpoint (dev) | ✅ Exists | `https://api.dev.duseum.com/webhooks/stripe` — destination ID: `we_1TMiBcDeejIUwJISRTd0wITw` |
-| Stripe webhook endpoint (prod) | ✅ Exists | `https://api.prod.duseum.com/webhooks/stripe` — destination ID: `we_1TMiH8RUKQLlSd6oP9UMFQ3C` |
+| Stripe Connect webhook (dev) | ✅ Exists | `https://api.dev.duseum.com/webhooks/stripe` — destination ID: `we_1TMiBcDeejIUwJISRTd0wITw` — "Events from: Connected accounts" |
+| Stripe Connect webhook (prod) | ✅ Exists | `https://api.prod.duseum.com/webhooks/stripe` — destination ID: `we_1TMiH8RUKQLlSd6oP9UMFQ3C` — "Events from: Connected accounts" |
+| Stripe Account webhook (dev) | ✅ Exists | `https://api.dev.duseum.com/webhooks/stripe` — destination ID: `we_1TSHYrDeejIUwJISbtordMME` — "Events from: Your account" |
+| Stripe Account webhook (prod) | ✅ Exists | `https://api.prod.duseum.com/webhooks/stripe` — destination ID: `we_1TSHcWRUKQLlSd6o23Jx4hyx` — "Events from: Your account" |
 | Secrets Manager secrets (dev + prod) | ✅ Seeded | All Stripe keys, CloudFront private key, unsubscribe HMAC secret — see PHASE-0.4 |
 
 ## AWS CLI
@@ -44,10 +46,10 @@ These resources already exist in account `408141212087`. Reference them, never r
 
 Two separate Stripe accounts — one per environment:
 
-| Env | Account ID | Connect Client ID | Webhook Destination ID |
-|---|---|---|---|
-| dev | `acct_1TMYUPDeejIUwJIS` | `ca_ULF5h4bUlGnwEo3YRUioqoI8hogxwvcb` | `we_1TMiBcDeejIUwJISRTd0wITw` |
-| prod | `acct_1TMYUIRUKQLlSd6o` | `ca_ULF9jsCeRlmkF08gQBXwDqivNgiw38lA` | `we_1TMiH8RUKQLlSd6oP9UMFQ3C` |
+| Env | Account ID | Connect Client ID | Connect Webhook ID | Account Webhook ID |
+|---|---|---|---|---|
+| dev | `acct_1TMYUPDeejIUwJIS` | `ca_ULF5h4bUlGnwEo3YRUioqoI8hogxwvcb` | `we_1TMiBcDeejIUwJISRTd0wITw` | `we_1TSHYrDeejIUwJISbtordMME` |
+| prod | `acct_1TMYUIRUKQLlSd6o` | `ca_ULF9jsCeRlmkF08gQBXwDqivNgiw38lA` | `we_1TMiH8RUKQLlSd6oP9UMFQ3C` | `we_1TSHcWRUKQLlSd6o23Jx4hyx` |
 
 **Extra subscribed webhook events** (beyond PROJECT.md spec): The webhook endpoints also receive `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.payment_succeeded`, `subscription_schedule.*`, `customer.subscription.trial_will_end`, and `account.updated`. The `subscriptions-webhook-lambda` must handle all of these gracefully:
 - `customer.subscription.paused` → update Subscription status to `PAUSED` in DynamoDB

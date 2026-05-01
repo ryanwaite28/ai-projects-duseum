@@ -718,7 +718,8 @@ Each Lambda function has its own IAM role granting only what it needs:
 
 ```
 duseum/{env}/stripe/secret-key               # Stripe secret key (sk_test_ / sk_live_)
-duseum/{env}/stripe/webhook-secret           # Stripe webhook signing secret (whsec_)
+duseum/{env}/stripe/webhook-secret           # Connect webhook signing secret — events from Express accounts (account.updated)
+duseum/{env}/stripe/webhook-secret-account   # Account webhook signing secret — platform events (payment_intent.*, customer.subscription.*, invoice.*)
 duseum/{env}/stripe/connect-client-id        # Stripe Connect client ID
 duseum/{env}/cloudfront/private-key          # CloudFront signed URL RSA private key (PEM)
 duseum/{env}/ses/from-address                # Verified SES sender address (e.g. no-reply@duseum.com)
@@ -1684,6 +1685,13 @@ Lambda: generates signed URL on access-authorized requests only
 ### 7.4 Stripe Webhook Security
 
 Stripe webhook events are verified using `stripe.webhooks.constructEvent()` with the webhook signing secret. The verification happens in `subscriptions-webhook-lambda` before any processing. Events that fail signature verification are logged and dropped (not retried) — signature failures indicate forgery, not transient errors.
+
+**Two webhook endpoints, same URL.** Duseum registers two separate Stripe webhook endpoints both pointing to `POST /webhooks/stripe`:
+
+1. **Connect webhook** (`duseum/{env}/stripe/webhook-secret`) — "Events from: Connected and v2 accounts" — receives only `account.updated` from Express-connected accounts.
+2. **Account webhook** (`duseum/{env}/stripe/webhook-secret-account`) — "Events from: Your account" — receives platform events: `payment_intent.*`, `customer.subscription.*`, `invoice.*`.
+
+Since the Lambda cannot know which endpoint delivered a given message, it tries the Account secret first (covers the majority of events), then falls back to the Connect secret on `StripeSignatureVerificationError`. Both secrets are cached module-level in `packages/shared/src/secrets.ts`.
 
 ### 7.5 WAF Rules
 
