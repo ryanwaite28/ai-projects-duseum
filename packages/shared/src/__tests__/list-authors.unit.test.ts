@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
-import { listAuthors } from '../db/users.repository.js'
+import { listAuthors } from '../db/authors.repository.js'
 import type { AuthorProfile } from '../types/index.js'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
