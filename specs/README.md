@@ -19,7 +19,7 @@ Run `/sync-specs` to audit FR coverage and generate stubs for any uncovered func
 |---|---|---|
 | [profile-crud.md](users/profile-crud.md) | FR-PROF-02–06, FR-VIEW-08 | ✅ Implemented |
 | [author-onboarding.md](users/author-onboarding.md) | FR-AUTH-PROF-01, 05–09 | ✅ Implemented |
-| [author-directory.md](users/author-directory.md) | FR-DISC-04 | ⬜ Pending |
+| [author-directory.md](users/author-directory.md) | FR-DISC-04 | ✅ Implemented |
 | [follows.md](users/follows.md) | FR-VIEW-06, FR-VIEW-06a, FR-SOC-06 | ⬜ Pending |
 | [notification-preferences.md](users/notification-preferences.md) | FR-VIEW-09, FR-VIEW-10, FR-NOTIF-08 | ⬜ Pending |
 
@@ -88,7 +88,7 @@ Run `/sync-specs` to audit FR coverage and generate stubs for any uncovered func
 | [messaging-stack.md](infrastructure/messaging-stack.md) | NFR-REL-02, 04, FR-NOTIF-02, 09 | ✅ Implemented |
 | [api-stack.md](infrastructure/api-stack.md) | NFR-PERF-03, NFR-SEC-01, NFR-OBS-03 | ✅ Implemented |
 | [cdn-stack.md](infrastructure/cdn-stack.md) | NFR-PERF-02, NFR-SEC-04, 06, 07 | ✅ Implemented |
-| [monitoring-stack.md](infrastructure/monitoring-stack.md) | NFR-OBS-01–04 | ⬜ Pending |
+| [monitoring-stack.md](infrastructure/monitoring-stack.md) | NFR-OBS-01–04 | ✅ Implemented |
 | [cicd.md](infrastructure/cicd.md) | NFR-REL-01 | ✅ Implemented |
 
 ## Frontend

@@ -268,6 +268,53 @@ describe('GET /authors', () => {
     expect(counts).toEqual(sorted)
   })
 
+  it('excludes SUSPENDED authors from results', async () => {
+    await seedAuthors(2)
+    // Seed one SUSPENDED author — must not appear in the response
+    await seedItem({
+      PK: 'USER#author-suspended-001', SK: 'PROFILE#AUTHOR',
+      userId: 'author-suspended-001', profileType: 'AUTHOR', status: 'SUSPENDED',
+      displayName: 'Suspended Author', bio: 'Should not appear.',
+      profilePhotoS3Key: null, coverPhotoS3Key: null,
+      stripeConnectAccountId: null, authorSubscriptionPriceId: null,
+      authorSubscriptionMonthlyUsd: null, featuredPieceIds: [],
+      createdAt: '2025-06-01T00:00:00.000Z',
+      totalPiecesCount: 0, followerCount: 0, subscriberCount: 999,
+    })
+
+    const event = makeEvent('GET', '/authors', { queryStringParameters: { limit: '20' } })
+    const res = await handler(event as never, makeCtx())
+    expect(res.statusCode).toBe(200)
+
+    const body = JSON.parse(res.body!)
+    const ids = body.items.map((a: { userId: string }) => a.userId)
+    expect(ids).not.toContain('author-suspended-001')
+    expect(body.items).toHaveLength(2)
+  })
+
+  it('excludes DEACTIVATED authors from results', async () => {
+    await seedAuthors(1)
+    await seedItem({
+      PK: 'USER#author-deactivated-001', SK: 'PROFILE#AUTHOR',
+      userId: 'author-deactivated-001', profileType: 'AUTHOR', status: 'DEACTIVATED',
+      displayName: 'Deactivated Author', bio: 'Should not appear.',
+      profilePhotoS3Key: null, coverPhotoS3Key: null,
+      stripeConnectAccountId: null, authorSubscriptionPriceId: null,
+      authorSubscriptionMonthlyUsd: null, featuredPieceIds: [],
+      createdAt: '2025-06-01T00:00:00.000Z',
+      totalPiecesCount: 0, followerCount: 0, subscriberCount: 999,
+    })
+
+    const event = makeEvent('GET', '/authors', { queryStringParameters: { limit: '20' } })
+    const res = await handler(event as never, makeCtx())
+    expect(res.statusCode).toBe(200)
+
+    const body = JSON.parse(res.body!)
+    const ids = body.items.map((a: { userId: string }) => a.userId)
+    expect(ids).not.toContain('author-deactivated-001')
+    expect(body.items).toHaveLength(1)
+  })
+
   it('returns 400 for invalid sort value', async () => {
     const event = makeEvent('GET', '/authors', { queryStringParameters: { sort: 'invalid' } })
     const res = await handler(event as never, makeCtx())

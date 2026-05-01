@@ -1,6 +1,6 @@
 ## Spec: Monitoring Stack (CloudWatch + X-Ray)
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: NFR-OBS-01, NFR-OBS-02, NFR-OBS-03, NFR-OBS-04
 **Relevant PROJECT.md sections**: 5, 13.5
 
@@ -9,12 +9,12 @@
 **Prerequisites**: All other stacks deployed (storage, auth, messaging, api, cdn); ops email address provided in CDK context for SNS subscription
 
 **Done when**:
-- [ ] `cdk synth --strict --context env=dev` passes with zero warnings
-- [ ] 5 CloudWatch alarms created with correct thresholds and periods per the alarm table
-- [ ] CloudWatch Dashboard created with 4 metric sections (API GW, Lambda, DynamoDB, SQS)
-- [ ] SNS alert topic has at least one email subscription
-- [ ] All monitoring resources tagged `Project=duseum`, `Environment={env}`, `Stack=monitoring`, `ManagedBy=CDK`
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] `cdk synth --strict --context env=dev` passes with zero warnings
+- [x] 5 CloudWatch alarms created with correct thresholds and periods per the alarm table
+- [x] CloudWatch Dashboard created with 4 metric sections (API GW, Lambda, DynamoDB, SQS)
+- [x] SNS alert topic has at least one email subscription
+- [x] All monitoring resources tagged `Project=duseum`, `Environment={env}`, `Stack=monitoring`, `ManagedBy=CDK`
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `infrastructure/stacks/monitoring-stack.ts` — CloudWatch dashboard, alarms, SNS topic for alerts
