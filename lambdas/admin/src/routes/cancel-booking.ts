@@ -35,6 +35,10 @@ export const cancelBooking = async (
   const booking = await getBookingByBookingId(docClient, bookingId)
   if (!booking) throw new NotFoundError('Booking not found')
 
+  if (booking.featureStatus === 'PENDING_PAYMENT') {
+    throw new ValidationError('Cannot cancel a booking that has not been confirmed — payment has not been captured.')
+  }
+
   if (booking.featureStatus === 'ARCHIVED' || booking.featureStatus === 'CANCELLED') {
     throw new ConflictError(`Booking cannot be cancelled — current status is ${booking.featureStatus}`)
   }

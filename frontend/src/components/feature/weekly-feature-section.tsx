@@ -10,6 +10,16 @@ import { ApiError } from '../../services/api'
 
 type FlowStep = 'idle' | 'paying' | 'confirmed'
 
+function currentIsoWeek(): string {
+  const now       = new Date()
+  const thursday  = new Date(now)
+  thursday.setUTCDate(now.getUTCDate() + (4 - (now.getUTCDay() || 7)))
+  const year      = thursday.getUTCFullYear()
+  const startOfYear = new Date(Date.UTC(year, 0, 1))
+  const week      = Math.ceil(((thursday.getTime() - startOfYear.getTime()) / 86_400_000 + startOfYear.getUTCDay() + 1) / 7)
+  return `${year}-W${String(week).padStart(2, '0')}`
+}
+
 const statusBadge: Record<BookingStatus, { label: string; cls: string }> = {
   PENDING_PAYMENT: { label: 'Pending',   cls: 'text-gold     bg-gold/10'        },
   CONFIRMED:       { label: 'Confirmed', cls: 'text-[#5a9e6e] bg-[#5a9e6e]/10'  },
@@ -146,6 +156,7 @@ export const WeeklyFeatureSection = () => {
             weeks={availability.weeks}
             selectedWeek={selectedWeek}
             onSelect={setSelectedWeek}
+            disabledWeeks={new Set([currentIsoWeek()])}
           />
         ) : (
           <p className="text-stone-light text-sm font-body">

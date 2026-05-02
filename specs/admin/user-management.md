@@ -1,6 +1,6 @@
 ## Spec: Admin User & Content Management
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-ADMIN-01, FR-ADMIN-02, FR-ADMIN-03, FR-ADMIN-04
 **Relevant PROJECT.md sections**: 2.10, 4.2, 7.1, 8
 
@@ -9,11 +9,11 @@
 **Prerequisites**: Cognito User Pool deployed with `ADMIN` group; Admin JWT middleware implemented (checks Cognito group claim); `admin-lambda` deployed; `users/profile-crud.md` and `artworks/artwork-crud.md` complete
 
 **Done when**:
-- [ ] Non-Admin JWT on any `/admin/*` route → 403 (rejected by middleware before route handler)
-- [ ] Suspend user: Cognito `Enabled=false` AND both VIEWER + AUTHOR profile records set to `SUSPENDED`; already-suspended → 200 idempotent
-- [ ] Reinstate: Cognito `Enabled=true` AND profiles restored to `ACTIVE`
-- [ ] Delete piece: `status=ARCHIVED`; delete comment: `hidden=true`; both log moderation action
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] Non-Admin JWT on any `/admin/*` route → 403 (rejected by middleware before route handler)
+- [x] Suspend user: Cognito `Enabled=false` AND both VIEWER + AUTHOR profile records set to `SUSPENDED`; already-suspended → 200 idempotent
+- [x] Reinstate: Cognito `Enabled=true` AND profiles restored to `ACTIVE`
+- [x] Delete piece: `status=ARCHIVED`; delete comment: `hidden=true`; both log moderation action
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `lambdas/admin/src/routes/list-users.ts` — `GET /admin/users`

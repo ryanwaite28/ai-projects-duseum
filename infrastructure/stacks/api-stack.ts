@@ -608,7 +608,11 @@ export class ApiStack extends cdk.Stack {
       envName,
       description: `[${envName}] maintenance-lambda — daily feature selection + weekly rotation`,
       timeout: cdk.Duration.seconds(300), // up to 5 min for maintenance tasks
-      environment: { ...commonEnv },
+      environment: {
+        ...commonEnv,
+        DAILY_FEATURE_RULE_NAME:   `duseum-${envName}-eventbridge-daily-featured-author`,
+        WEEKLY_ROTATION_RULE_NAME: `duseum-${envName}-eventbridge-weekly-feature-rotation`,
+      },
       initialPolicy: [
         mainTableCrudPolicy,
         new iam.PolicyStatement({

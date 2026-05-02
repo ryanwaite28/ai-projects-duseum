@@ -1,6 +1,6 @@
 ## Spec: Admin Panel UI
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-ADMIN-01, FR-ADMIN-02, FR-ADMIN-03, FR-ADMIN-04, FR-ADMIN-05, FR-ADMIN-06, FR-ADMIN-07
 **Relevant PROJECT.md sections**: 2.10, 6.8
 
@@ -9,13 +9,13 @@
 **Prerequisites**: Admin API endpoints complete (`admin/user-management.md`, `admin/feature-management.md`, `admin/platform-config.md`); `admin-guard.tsx` route guard created; test user added to Cognito `ADMIN` group
 
 **Done when**:
-- [ ] Non-Admin users redirected from all `/admin/*` routes by `admin-guard.tsx`
-- [ ] User list is paginated; suspend/reinstate actions require confirmation modal before API call
-- [ ] Platform config form validates all 5 fields before calling `PUT /admin/config`
-- [ ] Daily feature override: Author search → select → confirm writes new daily featured
-- [ ] Weekly booking table shows next 8 weeks; Admin cancel shows confirmation modal with refund warning
-- [ ] Destructive action buttons styled with `text-[--color-error]`
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] Non-Admin users redirected from all `/admin/*` routes by `admin-guard.tsx`
+- [x] User list is paginated; suspend/reinstate actions require confirmation modal before API call
+- [x] Platform config form validates all 5 fields before calling `PUT /admin/config`
+- [x] Daily feature override: Author search → select → confirm writes new daily featured
+- [x] Weekly booking table shows next 8 weeks; Admin cancel shows confirmation modal with refund warning
+- [x] Destructive action buttons styled with `text-[--color-error]`
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `frontend/src/pages/admin/index.tsx` — admin dashboard overview

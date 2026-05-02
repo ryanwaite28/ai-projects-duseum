@@ -1,6 +1,6 @@
 ## Spec: Browse & Gallery UI
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-DISC-01, FR-DISC-02, FR-DISC-05, FR-VIEW-02, FR-VIEW-03, FR-VIEW-04, FR-VIEW-05
 **Relevant PROJECT.md sections**: 2.8, 6.8
 
@@ -9,14 +9,14 @@
 **Prerequisites**: Browse and homepage API endpoints complete (`discovery/browse-artworks.md`); `ArtPieceCard` and `LockedPieceOverlay` components created; design tokens in `tailwind.config.ts`; `artworks.service.ts` with `browseArtworks()` and `getArtworkDetail()` implemented
 
 **Done when**:
-- [ ] Homepage renders Daily Featured Author hero + Weekly Featured carousel + recent/trending grids
-- [ ] `LockedPieceOverlay` never includes actual `img` `src` when `accessible=false`
-- [ ] `ArtPieceCard` renders correct overlay type (PRIVATE/free-tier) based on API `accessible` flag
-- [ ] Browse page filters (category, tags, sort) update URL params and trigger re-fetch
-- [ ] Cursor-based pagination loads next page without full page reload
-- [ ] Piece detail page shows full image when `accessible=true`; locked overlay when `accessible=false`
-- [ ] Frontend never constructs CloudFront/S3 URLs — always uses `imageUrl`/`thumbnailUrl` from API
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] Homepage renders Daily Featured Author hero + Weekly Featured carousel + recent/trending grids
+- [x] `LockedPieceOverlay` never includes actual `img` `src` when `accessible=false`
+- [x] `ArtPieceCard` renders correct overlay type (PRIVATE/free-tier) based on API `accessible` flag
+- [x] Browse page filters (category, tags, sort) update URL params and trigger re-fetch
+- [x] Cursor-based pagination loads next page without full page reload
+- [x] Piece detail page shows full image when `accessible=true`; locked overlay when `accessible=false`
+- [x] Frontend never constructs CloudFront/S3 URLs — always uses `imageUrl`/`thumbnailUrl` from API
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `frontend/src/pages/home.tsx` — homepage: featured Author, featured Authors carousel, recent + trending

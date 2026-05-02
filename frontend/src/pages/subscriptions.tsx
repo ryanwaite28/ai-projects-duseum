@@ -5,6 +5,7 @@ import { PageLayout } from '../components/layout/PageLayout'
 import { EyebrowLabel } from '../components/ui/EyebrowLabel'
 import { GoldDivider } from '../components/ui/GoldDivider'
 import { Button } from '../components/ui/Button'
+import { PlatformSubscribeCTA } from '../components/subscription/PlatformSubscribeCTA'
 import { useSubscriptions } from '../hooks/use-subscriptions'
 import { subscriptionsService } from '../services/subscriptions.service'
 import type { ApiError } from '../services/api'
@@ -17,12 +18,6 @@ export default function SubscriptionsPage() {
     mutationFn: () => subscriptionsService.createPortalSession(),
     onSuccess:  (data) => { window.location.href = data.portalUrl },
     onError:    (err: ApiError) => setPortalError(err.message ?? 'Could not open billing portal.'),
-  })
-
-  const upgradeMutation = useMutation({
-    mutationFn: () => subscriptionsService.createPlatformCheckout(),
-    onSuccess:  (data) => { window.location.href = data.checkoutUrl },
-    onError:    (err: ApiError) => setPortalError(err.message ?? 'Could not start checkout.'),
   })
 
   return (
@@ -81,17 +76,7 @@ export default function SubscriptionsPage() {
               </div>
             </div>
           ) : (
-            <div className="bg-ink border border-gold/15 rounded-sm p-6 flex items-center justify-between gap-6">
-              <div>
-                <p className="text-[0.72rem] font-medium tracking-[0.14em] uppercase text-stone-light mb-1">Free tier</p>
-                <p className="text-[0.88rem] font-light text-stone-light">
-                  Upgrade to unlock the full collection.
-                </p>
-              </div>
-              <Button variant="primary" onClick={() => { setPortalError(null); upgradeMutation.mutate() }} disabled={upgradeMutation.isPending}>
-                {upgradeMutation.isPending ? '…' : 'Upgrade'}
-              </Button>
-            </div>
+            <PlatformSubscribeCTA />
           )}
         </div>
       </section>

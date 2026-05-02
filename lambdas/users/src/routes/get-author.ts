@@ -53,7 +53,8 @@ export const getAuthor = async (
       subscriberCount:   author.subscriberCount,
       totalPiecesCount:  author.totalPiecesCount,
       authorSubscriptionMonthlyUsd: author.authorSubscriptionMonthlyUsd,
-      createdAt:         author.createdAt,
+      connectChargesEnabled:        author.connectChargesEnabled ?? null,
+      createdAt:                    author.createdAt,
     },
     gallery: {
       items: gallery.items.map((p) => ({

@@ -1,6 +1,6 @@
 ## Spec: Featured Authors UI
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-FEAT-07, FR-FEAT-08, FR-FEAT-10, FR-FEAT-12, FR-FEAT-16
 **Relevant PROJECT.md sections**: 2.11, 6.8
 
@@ -9,13 +9,13 @@
 **Prerequisites**: Features API endpoints complete (`features/daily-featured.md`, `features/weekly-booking.md`); Stripe.js loaded in `index.html`; Author dashboard exists; booking form component scaffolded
 
 **Done when**:
-- [ ] `WeeklyFeaturedCarousel` array shuffled client-side on every mount — order not fixed across renders
-- [ ] `DailyFeaturedSpotlight` renders cover photo, bio excerpt, and pinned pieces from API
-- [ ] Booking calendar disables fully-booked weeks and current ISO week
-- [ ] "Book this week" CTA calls `POST /features/weekly/book` → receives `paymentIntentClientSecret`
-- [ ] Stripe.js `confirmPayment()` called with client secret; on success → confirmation shown + history updated
-- [ ] Booking page visible to active Authors only (auth guard redirects non-Authors)
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] `WeeklyFeaturedCarousel` array shuffled client-side on every mount — order not fixed across renders
+- [x] `DailyFeaturedSpotlight` renders cover photo, bio excerpt, and pinned pieces from API
+- [x] Booking calendar disables fully-booked weeks and current ISO week
+- [x] "Book this week" CTA calls `POST /features/weekly/book` → receives `paymentIntentClientSecret`
+- [x] Stripe.js `confirmPayment()` called with client secret; on success → confirmation shown + history updated
+- [x] Booking page visible to active Authors only (auth guard redirects non-Authors)
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `frontend/src/components/home/DailyFeaturedSpotlight.tsx` — hero section for Daily Featured Author

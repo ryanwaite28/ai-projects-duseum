@@ -1,6 +1,6 @@
 ## Spec: Subscription UI
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-SUB-09, FR-SUB-11, FR-SUB-12, FR-VIEW-04, FR-VIEW-05
 **Relevant PROJECT.md sections**: 2.7, 6.8
 
@@ -12,10 +12,10 @@
 - [x] `?connect=return` URL param detected on Author Dashboard mount → success toast + React Query cache invalidated
 - [x] `?connect=refresh` URL param detected → auto-calls `POST /subscriptions/connect/onboard` → redirects to new `onboardingUrl`
 - [x] `ConnectStatusCard` shows correct status (pending/connected) with animated status dot
-- [ ] `PlatformSubscribeCTA` redirects to Stripe Checkout on click; cache invalidated on post-success return
-- [ ] `AuthorSubscribeCTA` visible only when Author has price set + `connectChargesEnabled=true`
-- [ ] "Manage" button → `POST /subscriptions/portal` → Billing Portal redirect
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] `PlatformSubscribeCTA` redirects to Stripe Checkout on click; cache invalidated on post-success return
+- [x] `AuthorSubscribeCTA` visible only when Author has price set + `connectChargesEnabled=true`
+- [x] "Manage" button → `POST /subscriptions/portal` → Billing Portal redirect
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `frontend/src/pages/dashboard/author.tsx` — Connect onboarding status card; return/refresh param detection

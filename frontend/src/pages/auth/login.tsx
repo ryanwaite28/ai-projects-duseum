@@ -1,14 +1,17 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { signInWithRedirect } from 'aws-amplify/auth'
 import { EyebrowLabel } from '../../components/ui/EyebrowLabel'
 import { Button } from '../../components/ui/Button'
 import { GoldDivider } from '../../components/ui/GoldDivider'
 import { useAuthStore } from '../../store/auth.store'
 
+const IS_LOCAL_AUTH = import.meta.env.VITE_AUTH_STUB === 'true'
+
 export default function LoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const returnTo = searchParams.get('return') ?? '/'
+  const returnTo = searchParams.get('return') ?? '/dashboard'
 
   const { signIn, isLoading, error, clearError } = useAuthStore()
 
@@ -108,13 +111,40 @@ export default function LoginPage() {
           </Button>
         </form>
 
+        {/* Google OAuth */}
+        {!IS_LOCAL_AUTH && (
+          <>
+            <div className="flex items-center gap-3 my-6">
+              <div className="flex-1 h-px bg-gold/10" />
+              <span className="text-[0.68rem] tracking-[0.14em] uppercase text-stone-light">or</span>
+              <div className="flex-1 h-px bg-gold/10" />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full justify-center"
+              onClick={() => signInWithRedirect({ provider: 'Google' })}
+            >
+              Continue with Google
+            </Button>
+          </>
+        )}
+
         {/* Footer links */}
-        <p className="mt-8 text-center text-[0.82rem] font-light text-stone-light">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-gold hover:text-gold-light transition-colors duration-200">
-            Join Duseum
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <Link
+            to="/reset-password"
+            className="text-[0.82rem] font-light text-stone-light hover:text-gold transition-colors duration-200"
+          >
+            Forgot your password?
           </Link>
-        </p>
+          <p className="text-[0.82rem] font-light text-stone-light">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-gold hover:text-gold-light transition-colors duration-200">
+              Join Duseum
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )

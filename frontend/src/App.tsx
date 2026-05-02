@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/auth.store'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
-import { AdminRoute } from './components/layout/AdminRoute'
+import { AdminGuard } from './middleware/admin-guard'
 
 const HomePage                   = lazy(() => import('./pages/home'))
 const BrowsePage                 = lazy(() => import('./pages/browse'))
@@ -30,8 +30,9 @@ const AdminConfigPage                = lazy(() => import('./pages/admin/config')
 const AdminFeaturesPage              = lazy(() => import('./pages/admin/features'))
 const ForbiddenPage                  = lazy(() => import('./pages/errors/forbidden'))
 const LoginPage                      = lazy(() => import('./pages/auth/login'))
-const RegisterPage               = lazy(() => import('./pages/auth/register'))
-const VerifyPage                 = lazy(() => import('./pages/auth/verify-email'))
+const RegisterPage                   = lazy(() => import('./pages/auth/register'))
+const VerifyPage                     = lazy(() => import('./pages/auth/verify-email'))
+const ResetPasswordPage              = lazy(() => import('./pages/auth/reset-password'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,6 +68,7 @@ function AppRoutes() {
         <Route path="/login"                  element={<LoginPage />} />
         <Route path="/register"               element={<RegisterPage />} />
         <Route path="/verify-email"           element={<VerifyPage />} />
+        <Route path="/reset-password"         element={<ResetPasswordPage />} />
 
         {/* ── Authenticated ───────────────────────────────────────── */}
         <Route path="/dashboard"              element={<ProtectedRoute><DashboardIndexPage /></ProtectedRoute>} />
@@ -84,11 +86,11 @@ function AppRoutes() {
         <Route path="/notifications/unsubscribe" element={<UnsubscribePage />} />
 
         {/* ── Admin (requires systemRole=ADMIN) ───────────────────── */}
-        <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
-        <Route path="/admin/users"     element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
-        <Route path="/admin/content"   element={<AdminRoute><AdminContentPage /></AdminRoute>} />
-        <Route path="/admin/config"    element={<AdminRoute><AdminConfigPage /></AdminRoute>} />
-        <Route path="/admin/features"  element={<AdminRoute><AdminFeaturesPage /></AdminRoute>} />
+        <Route path="/admin/dashboard" element={<AdminGuard><AdminDashboardPage /></AdminGuard>} />
+        <Route path="/admin/users"     element={<AdminGuard><AdminUsersPage /></AdminGuard>} />
+        <Route path="/admin/content"   element={<AdminGuard><AdminContentPage /></AdminGuard>} />
+        <Route path="/admin/config"    element={<AdminGuard><AdminConfigPage /></AdminGuard>} />
+        <Route path="/admin/features"  element={<AdminGuard><AdminFeaturesPage /></AdminGuard>} />
 
         <Route path="/403"                          element={<ForbiddenPage />} />
 

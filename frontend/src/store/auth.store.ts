@@ -6,6 +6,8 @@ import {
   confirmSignUp,
   fetchAuthSession,
   getCurrentUser,
+  resetPassword,
+  confirmResetPassword,
 } from 'aws-amplify/auth'
 
 export interface AuthUser {
@@ -20,12 +22,14 @@ interface AuthState {
   error: string | null
 
   // Actions
-  initialize:   () => Promise<void>
-  signIn:       (email: string, password: string) => Promise<void>
-  signOut:      () => Promise<void>
-  signUp:       (email: string, password: string) => Promise<void>
-  confirmEmail: (email: string, code: string) => Promise<void>
-  clearError:   () => void
+  initialize:              () => Promise<void>
+  signIn:                  (email: string, password: string) => Promise<void>
+  signOut:                 () => Promise<void>
+  signUp:                  (email: string, password: string) => Promise<void>
+  confirmEmail:            (email: string, code: string) => Promise<void>
+  forgotPassword:          (email: string) => Promise<void>
+  confirmForgotPassword:   (email: string, code: string, newPassword: string) => Promise<void>
+  clearError:              () => void
 }
 
 // =============================================================================
@@ -202,6 +206,52 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isLoading: false })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Confirmation failed'
+      set({ error: msg, isLoading: false })
+      throw err
+    }
+  },
+
+  forgotPassword: async (email) => {
+    set({ isLoading: true, error: null })
+    if (IS_LOCAL_AUTH) {
+      const stored = localUsers.find(email)
+      if (!stored) {
+        const msg = 'No account found for this email.'
+        set({ error: msg, isLoading: false })
+        throw new Error(msg)
+      }
+      set({ isLoading: false })
+      return
+    }
+    try {
+      await resetPassword({ username: email })
+      set({ isLoading: false })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Password reset failed'
+      set({ error: msg, isLoading: false })
+      throw err
+    }
+  },
+
+  confirmForgotPassword: async (email, code, newPassword) => {
+    set({ isLoading: true, error: null })
+    if (IS_LOCAL_AUTH) {
+      const stored = localUsers.find(email)
+      if (!stored) {
+        const msg = 'No account found for this email.'
+        set({ error: msg, isLoading: false })
+        throw new Error(msg)
+      }
+      // Stub: accept any code, update password
+      localUsers.save({ ...stored, password: newPassword })
+      set({ isLoading: false })
+      return
+    }
+    try {
+      await confirmResetPassword({ username: email, confirmationCode: code, newPassword })
+      set({ isLoading: false })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Password reset confirmation failed'
       set({ error: msg, isLoading: false })
       throw err
     }

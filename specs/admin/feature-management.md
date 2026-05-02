@@ -1,6 +1,6 @@
 ## Spec: Admin Feature & Booking Management
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-ADMIN-06, FR-ADMIN-07, FR-FEAT-06
 **Relevant PROJECT.md sections**: 2.10, 2.11, 4.2, 8
 
@@ -9,11 +9,11 @@
 **Prerequisites**: `features/weekly-booking.md` complete; Stripe secret key in Secrets Manager; Admin middleware in place; `admin-lambda` deployed
 
 **Done when**:
-- [ ] Admin cancel: Stripe `refunds.create()` called BEFORE DynamoDB `featureStatus=CANCELLED` update; if Stripe fails, DynamoDB NOT updated
-- [ ] Cancel non-CONFIRMED booking (PENDING or already CANCELLED) → 400; booking not found → 404
-- [ ] `GET /admin/dashboard` returns all 7 aggregate metrics (totalUsers, platformSubs, authorSubs, MRR, signups 7d/30d, weeklyFeatureRevenue)
-- [ ] Slot count decrements after admin cancel (week becomes bookable again)
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] Admin cancel: Stripe `refunds.create()` called BEFORE DynamoDB `featureStatus=CANCELLED` update; if Stripe fails, DynamoDB NOT updated
+- [x] Cancel non-CONFIRMED booking (PENDING or already CANCELLED) → 400; booking not found → 404
+- [x] `GET /admin/dashboard` returns all 7 aggregate metrics (totalUsers, platformSubs, authorSubs, MRR, signups 7d/30d, weeklyFeatureRevenue)
+- [x] Slot count decrements after admin cancel (week becomes bookable again)
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `lambdas/admin/src/routes/get-dashboard.ts` — `GET /admin/dashboard`

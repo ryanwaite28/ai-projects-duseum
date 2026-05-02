@@ -248,20 +248,20 @@ Group 3 — Discovery
 [x] 8.  specs/discovery/browse-artworks.md
 
 Group 4 — Featured / monetization
-[ ] 9.  specs/features/maintenance-rotation.md
-[ ] 10. specs/features/daily-featured.md
-[ ] 11. specs/features/weekly-booking.md
+[x] 9.  specs/features/maintenance-rotation.md
+[x] 10. specs/features/daily-featured.md
+[x] 11. specs/features/weekly-booking.md
 
 Group 5 — Admin
-[ ] 12. specs/admin/user-management.md
-[ ] 13. specs/admin/feature-management.md
+[x] 12. specs/admin/user-management.md
+[x] 13. specs/admin/feature-management.md
 
 Group 6 — Frontend
-[ ] 14. specs/frontend/auth-ui.md
-[ ] 15. specs/frontend/browse-gallery-ui.md
-[ ] 16. specs/frontend/subscription-ui.md
-[ ] 17. specs/frontend/social-ui.md
-[ ] 18. specs/frontend/featured-ui.md
-[ ] 19. specs/frontend/author-dashboard-ui.md
-[ ] 20. specs/frontend/admin-panel-ui.md
+[x] 14. specs/frontend/auth-ui.md
+[x] 15. specs/frontend/browse-gallery-ui.md
+[x] 16. specs/frontend/subscription-ui.md
+[x] 17. specs/frontend/social-ui.md
+[x] 18. specs/frontend/featured-ui.md
+[x] 19. specs/frontend/author-dashboard-ui.md
+[x] 20. specs/frontend/admin-panel-ui.md
 ```
