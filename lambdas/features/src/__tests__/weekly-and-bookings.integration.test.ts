@@ -113,7 +113,7 @@ describe('GET /features/weekly', () => {
 
   it('accepts ?week= query param for a specific week', async () => {
     const nextWeek = addWeeks(getCurrentIsoWeek(), 1)
-    const event = makeEvent('GET', `/features/weekly?week=${nextWeek}`, {
+    const event = makeEvent('GET', '/features/weekly', {
       queryStringParameters: { week: nextWeek },
     })
     const res = await handler(event as never, makeCtx())
@@ -123,7 +123,7 @@ describe('GET /features/weekly', () => {
   })
 
   it('returns 400 for invalid week format', async () => {
-    const event = makeEvent('GET', '/features/weekly?week=bad-week', {
+    const event = makeEvent('GET', '/features/weekly', {
       queryStringParameters: { week: 'bad-week' },
     })
     const res = await handler(event as never, makeCtx())

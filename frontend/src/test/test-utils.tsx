@@ -17,11 +17,6 @@ export const createTestQueryClient = () =>
     },
   })
 
-interface WrapperProps {
-  children: React.ReactNode
-  initialPath?: string
-}
-
 const makeWrapper = (initialPath = '/') =>
   function TestWrapper({ children }: { children: React.ReactNode }) {
     const queryClient = createTestQueryClient()
