@@ -165,7 +165,7 @@ export default function ArtworkDetailPage() {
               </div>
 
               {/* Reactions */}
-              <ReactionBar artwork={artwork} className="mb-8" />
+              <ReactionBar artwork={artwork} activeReaction={artwork.viewerReaction} className="mb-8" />
 
               {/* Meta */}
               {artwork.publishedAt && (

@@ -37,10 +37,13 @@ export const bookWeeklyFeature = async (
 ): Promise<APIGatewayProxyStructuredResultV2> => {
   const { userId } = context
 
-  // ── Verify caller is an Author ─────────────────────────────────────────────
+  // ── Verify caller is an Author with Stripe Connect enabled ───────────────
   const authorProfile = await getAuthorProfile(docClient, userId)
   if (!authorProfile || authorProfile.status !== 'ACTIVE') {
     throw new ForbiddenError('An active Author profile is required to book a weekly feature.')
+  }
+  if (!authorProfile.connectChargesEnabled) {
+    throw new ForbiddenError('Stripe Connect charges must be enabled on your account before booking a weekly feature.')
   }
 
   // ── Parse + validate body ──────────────────────────────────────────────────

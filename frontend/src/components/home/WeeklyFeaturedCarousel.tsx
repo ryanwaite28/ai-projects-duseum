@@ -1,7 +1,17 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { EyebrowLabel } from '../ui/EyebrowLabel'
 import { useReveal } from '../../hooks/use-reveal'
 import type { WeeklyFeaturedAuthor, WeeklyFeaturedResponse } from '../../types/features'
+
+function shuffled<T>(arr: T[]): T[] {
+  const out = [...arr]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j]!, out[i]!]
+  }
+  return out
+}
 
 interface WeeklyFeaturedCarouselProps {
   data?:      WeeklyFeaturedResponse | null
@@ -70,8 +80,13 @@ const AuthorSlot = ({ author, index }: { author?: WeeklyFeaturedAuthor; index: n
 
 export const WeeklyFeaturedCarousel = ({ data, isLoading }: WeeklyFeaturedCarouselProps) => {
   const ref    = useReveal<HTMLElement>()
-  const authors = data?.featuredAuthors ?? []
-  const slots   = Array.from({ length: 10 }, (_, i) => authors[i] as WeeklyFeaturedAuthor | undefined)
+  // Shuffle once on mount so order differs each page load (FR-FEAT-16)
+  const shuffledAuthors = useMemo(
+    () => shuffled(data?.featuredAuthors ?? []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data?.isoWeek],
+  )
+  const slots = Array.from({ length: 10 }, (_, i) => shuffledAuthors[i] as WeeklyFeaturedAuthor | undefined)
 
   const weekLabel = data
     ? `${data.weekStartDate} – ${data.weekEndDate}`

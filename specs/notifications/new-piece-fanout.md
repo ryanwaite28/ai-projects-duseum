@@ -1,6 +1,6 @@
 ## Spec: New-Piece Notification Fan-Out
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-NOTIF-01, FR-NOTIF-02, FR-NOTIF-03, FR-NOTIF-04, FR-NOTIF-05, FR-NOTIF-06, FR-NOTIF-07, FR-NOTIF-08, FR-NOTIF-09, FR-NOTIF-10, FR-NOTIF-11, FR-NOTIF-12
 **Relevant PROJECT.md sections**: 2.12, 4.2, 4.6, 8
 
@@ -9,12 +9,12 @@
 **Prerequisites**: `users/follows.md` and `users/notification-preferences.md` complete; SQS notifications queue deployed; SES `no-reply@duseum.com` verified (pre-provisioned); unsubscribe HMAC secret in Secrets Manager; `notifications-lambda` deployed
 
 **Done when**:
-- [ ] PRIVATE piece notifications sent only to Author Subscribers with preference ≠ `PUBLIC_ONLY` and ≠ `NONE` and `globalNotificationOptOut=false`
-- [ ] PUBLIC piece notifications sent to all followers except preference=`NONE` or `globalNotificationOptOut=true`
-- [ ] SES failure for one follower logged + skipped; remaining followers still notified (FR-NOTIF-10)
-- [ ] Unsubscribe link in email sets that follower's `notificationPreference=NONE` when clicked (no login required)
-- [ ] `notificationsSent` count atomically incremented on ArtPiece record after fan-out completes
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] PRIVATE piece notifications sent only to Author Subscribers with preference ≠ `PUBLIC_ONLY` and ≠ `NONE` and `globalNotificationOptOut=false`
+- [x] PUBLIC piece notifications sent to all followers except preference=`NONE` or `globalNotificationOptOut=true`
+- [x] SES failure for one follower logged + skipped; remaining followers still notified (FR-NOTIF-10)
+- [x] Unsubscribe link in email sets that follower's `notificationPreference=NONE` when clicked (no login required)
+- [x] `notifiedCount` atomically incremented on ArtPiece record after fan-out completes
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `lambdas/notifications/src/index.ts` — SQS handler for `NEW_PIECE_PUBLISHED` messages

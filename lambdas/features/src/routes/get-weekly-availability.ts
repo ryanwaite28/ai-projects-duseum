@@ -45,5 +45,5 @@ export const getWeeklyAvailability = async (
     }
   })
 
-  return ok({ weeks, feeFeeUsd: feeUsd })
+  return ok({ weeks, feeUsd })
 }

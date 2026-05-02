@@ -6,6 +6,7 @@
 //
 // Artwork routes:
 //   GET    /artworks                                → listArtworks    (public)
+//   GET    /artworks/mine                           → listMyArtworks  (Author only, JWT required)
 //   GET    /artworks/{artworkId}                    → getArtwork      (public, optional JWT)
 //   POST   /artworks                               → createArtwork   (Author only)
 //   PUT    /artworks/{artworkId}                    → updateArtwork   (Author only)
@@ -44,6 +45,7 @@ import { addCollectionPieceRoute }  from './routes/add-collection-piece.js'
 import { removeCollectionPieceRoute } from './routes/remove-collection-piece.js'
 import { listCollectionPiecesRoute }   from './routes/list-collection-pieces.js'
 import { listAuthorCollectionsRoute }  from './routes/list-author-collections.js'
+import { listMyArtworks }             from './routes/list-my-artworks.js'
 
 const dispatch = async (
   event: APIGatewayProxyEventV2,
@@ -58,8 +60,9 @@ const dispatch = async (
   // ── /artworks/* ─────────────────────────────────────────────────────────────
   if (seg0 === 'artworks') {
     const artworkId = seg1
-    if (method === 'GET'    && !artworkId) return listArtworks(event, context)
-    if (method === 'GET'    && artworkId)  return getArtwork(event, context, artworkId)
+    if (method === 'GET'    && !artworkId)         return listArtworks(event, context)
+    if (method === 'GET'    && artworkId === 'mine') return listMyArtworks(event, context)
+    if (method === 'GET'    && artworkId)            return getArtwork(event, context, artworkId)
     if (method === 'POST'   && !artworkId) return createArtwork(event, context)
     if (method === 'PUT'    && artworkId)  return updateArtwork(event, context, artworkId)
     if (method === 'DELETE' && artworkId)  return deleteArtwork(event, context, artworkId)

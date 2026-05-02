@@ -153,12 +153,13 @@ To give artists a beautiful, museum-quality space to share their work — and to
 - **FR-ART-08**: Authors can permanently delete a piece (removes S3 object and all records; irreversible)
 - **FR-ART-09**: Art pieces support **tags** (up to 10 per piece; free-text, normalized to lowercase)
 - **FR-ART-10**: Art pieces track: view count, reaction count by type, comment count
+- **FR-ART-11**: Authors can retrieve all their own art pieces (PUBLIC, PRIVATE, DRAFT) via an authenticated `GET /artworks/mine` endpoint. This is separate from the public `GET /artworks` endpoint which only returns PUBLIC pieces visible to the caller based on tier access.
 
 ### 2.6 Collections
 
 - **FR-COL-01**: Authors create named collections (title, description, cover piece) to group their Art Pieces
-- **FR-COL-02**: A collection can contain any mix of PUBLIC and PRIVATE pieces; viewers only see pieces they have access to within a collection
-- **FR-COL-03**: Collections have their own visibility: `PUBLIC` (appears on Author profile) or `PRIVATE` (only visible to Author Subscribers)
+- **FR-COL-02**: A collection can contain any of the Author's art pieces regardless of piece visibility (`PUBLIC`, `PRIVATE`, or `DRAFT`). Viewers see individual pieces within a collection according to each piece's own access rules — private pieces remain gated by Author Subscription even inside a FREE collection.
+- **FR-COL-03**: Collections have their own visibility: `FREE` (visible to all viewers on the Author's profile) or `SUBSCRIBER_ONLY` (visible only to Author Subscribers). Collection visibility is **immutable after creation** — it cannot be changed once set. This prevents a `SUBSCRIBER_ONLY` collection from being flipped to `FREE` and inadvertently surfacing gated content.
 - **FR-COL-04**: Authors set the display order of pieces within a collection
 - **FR-COL-05**: A piece can belong to multiple collections
 - **FR-COL-06**: Collections display a piece count adjusted to the viewer's access tier (e.g., "12 pieces — 4 visible to you")
@@ -181,15 +182,15 @@ To give artists a beautiful, museum-quality space to share their work — and to
 
 ### 2.8 Discovery & Browse
 
-- **FR-DISC-01**: Public homepage shows: **Daily Featured Author** (randomly selected by the platform each day, free), **Weekly Featured Authors** (up to 10 paid slots, rotates every Monday), recently published pieces (paginated), trending pieces (by view + reaction velocity)
-- **FR-DISC-02**: Browse page with filters: category/medium, tags, sort (newest, trending, most-viewed)
-- **FR-DISC-03**: Search: full-text search across art piece titles, descriptions, tags, and author names (powered by DynamoDB + Lambda, or optionally OpenSearch in a future phase)
+- **FR-DISC-01**: Public homepage shows: **Daily Featured Author** (randomly selected by the platform each day, free), **Weekly Featured Authors** (up to 10 paid slots, rotates every Monday), recently published pieces (paginated). *(Trending pieces deferred — requires trendScore GSI not yet provisioned.)*
+- **FR-DISC-02**: Browse page with filters: category/medium, tags, sort (`newest` only in v1). *(sort=trending and sort=most-viewed deferred — require trendScore/viewCount GSIs.)*
+- **FR-DISC-03**: Search deferred to a future phase. *(Full-text search requires OpenSearch or a scan-based approach that conflicts with the no-full-scan rule.)*
 - **FR-DISC-04**: Author directory: paginated list of all Authors, sortable by subscriber count and newest
-- **FR-DISC-05**: Piece detail page: full-resolution image (CloudFront-served), metadata, Author info, comment thread, reactions, related pieces (same Author, same tags)
+- **FR-DISC-05**: Piece detail page: full-resolution image (CloudFront-served), metadata, Author info, reactions. *(Comment thread and related pieces on detail page deferred — add in frontend integration phase.)*
 
 ### 2.9 Social Interactions
 
-- **FR-SOC-01**: Viewers can react to art pieces with one of: `LOVE`, `WOW`, `FIRE`, `INSPIRED` (one reaction per user per piece; changing reaction replaces previous)
+- **FR-SOC-01**: Viewers can react to art pieces with one of: `LOVE`, `WOW`, `FIRE`, `INSPIRED` (one reaction per user per piece; changing reaction replaces previous). Reaction counts and the authenticated viewer's current reaction (`viewerReaction`) are returned as part of `GET /artworks/{artworkId}` — there is no separate reactions read endpoint. Access is enforced at the artwork read layer; `PUT`/`DELETE /artworks/{artworkId}/reactions` only verify the piece exists.
 - **FR-SOC-02**: Viewers can comment on art pieces (Author can disable comments per piece); max 1,000 chars per comment
 - **FR-SOC-03**: Authors can reply to comments; one level of nesting only (no nested replies to replies)
 - **FR-SOC-04**: Authors can pin/unpin comments on their pieces (up to 2 pinned per piece)
@@ -222,11 +223,11 @@ To give artists a beautiful, museum-quality space to share their work — and to
 
 - **FR-FEAT-08**: The homepage displays a **Weekly Featured Authors** section showing up to **10 Authors** for the current calendar week (Monday 00:00 UTC → Sunday 23:59 UTC)
 - **FR-FEAT-09**: Authors pay a **one-time flat fee** (configurable by Admins; default: $25/week) to book a weekly feature slot. Payment is a Stripe Payment Intent (not a recurring subscription)
-- **FR-FEAT-10**: Weekly feature slots are sold on a **first-come first-served** basis. Each week has exactly 10 slots. Authors book a specific future week from the available calendar; weeks where all 10 slots are already taken are shown as unavailable
+- **FR-FEAT-10**: Weekly feature slots are sold on a **first-come first-served** basis. Each week has exactly 10 slots. Authors book a specific week (current or future) from the available calendar; weeks where all 10 slots are already taken are shown as unavailable
 - **FR-FEAT-11**: An Author may only hold **one paid weekly feature booking per 3-month rolling period**. The 3-month window is calculated from the start of the booked week, looking back 3 calendar months. This limit is enforced at booking time; attempting to book a second slot within the window returns a `409 Conflict`
 - **FR-FEAT-12**: Booking flow: Author selects an available week → platform checks eligibility (FR-FEAT-11) and slot availability (FR-FEAT-10) → Stripe Payment Intent created → Author completes payment → booking confirmed and slot reserved atomically. If payment fails, no slot is reserved
 - **FR-FEAT-13**: Confirmed bookings are **non-refundable** unless cancelled by an Admin (FR-ADMIN-07). Authors may not cancel their own bookings
-- **FR-FEAT-14**: Authors can book up to **8 weeks in advance** from the current week. Weeks beyond 8 weeks are not yet open for booking
+- **FR-FEAT-14**: The booking calendar shows the **current week plus up to 8 future weeks** (9 options total). Weeks beyond 8 weeks ahead are not yet open for booking. Booking the current week is allowed provided slots remain.
 - **FR-FEAT-15**: Weekly Featured Authors rotate automatically at Monday 00:00 UTC via EventBridge. The `maintenance-lambda` activates the upcoming week's confirmed bookings and archives the previous week's
 - **FR-FEAT-16**: The weekly feature section displays each featured Author's: display name, cover photo, a sample of their latest 2 public pieces, and a "View Profile" link. Order within the section is randomized each page load to avoid positional advantage
 - **FR-FEAT-17**: Stripe webhook events for the weekly feature Payment Intent (`payment_intent.succeeded`, `payment_intent.payment_failed`) are processed by `subscriptions-webhook-lambda` using the same idempotency pattern as subscription webhooks
@@ -375,7 +376,7 @@ Each Lambda function handles a cohesive route group. Functions are **thin handle
 | `subscriptions-webhook-lambda` | — | SQS (from Stripe webhook SQS queue) | Process Stripe subscription events AND weekly feature Payment Intent events; update state in DynamoDB; idempotent via idempotency table |
 | `notifications-lambda` | — | SQS (from notification queue) | Fan-out new-piece email notifications to followers via SES; pages through Follow records; respects per-Viewer notification preferences and global opt-out; logs delivery summary count back to DynamoDB |
 | `features-lambda` | `GET /features/*`, `POST /features/weekly/book` | API GW | Read Daily Featured Author; read current/upcoming Weekly Featured Authors; book a weekly feature slot (eligibility check + Stripe Payment Intent creation) |
-| `social-lambda` | `/comments/*`, `/reactions/*` | API GW | Comments and reactions CRUD |
+| `social-lambda` | `/comments/*`, `PUT /artworks/*/reactions`, `DELETE /artworks/*/reactions` | API GW | Comments and reactions CRUD |
 | `admin-lambda` | `/admin/*` | API GW | Admin operations (requires ADMIN Cognito group) |
 | `auth-triggers-lambda` | — | Cognito Post-Confirmation trigger | Auto-create Viewer profile on email verification |
 | `media-lambda` | `POST /media/upload-intent` | API GW | Generate S3 presigned PUT URLs for art piece uploads; confirm upload |
@@ -1782,6 +1783,7 @@ Get a single art piece. Returns signed URL for private pieces if caller has acce
   "visibility": "PRIVATE",
   "viewCount": 88,
   "reactionCounts": { "LOVE": 15 },
+  "viewerReaction": "LOVE",
   "commentCount": 3,
   "commentsEnabled": true,
   "notifiedCount": 124,

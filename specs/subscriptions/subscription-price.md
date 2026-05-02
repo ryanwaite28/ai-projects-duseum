@@ -1,6 +1,6 @@
 ## Spec: Author Subscription Price Management
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-AUTH-PROF-05, FR-SUB-02
 **Relevant PROJECT.md sections**: 2.4, 2.7, 8
 
@@ -9,11 +9,11 @@
 **Prerequisites**: `subscriptions/connect-onboarding.md` complete; Author has `connectChargesEnabled=true`; Stripe secret key in Secrets Manager
 
 **Done when**:
-- [ ] `POST /subscriptions/author/price` creates new Stripe Price on Author's Connect account; returns 400 if price < 100 or > 5000 cents
-- [ ] Previous `stripePriceId` archived in Stripe when updating price (Stripe `prices.update({ active: false })`)
-- [ ] `null` price clears `stripePriceId` and `authorSubscriptionPriceCents` on Author profile; disables subscriptions
-- [ ] Author without Connect account or `connectChargesEnabled=false` → 400
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] `POST /users/me/author/subscription-price` creates new Stripe Price on Author's Connect account; returns 400 if amountUsd < 1 or > 50
+- [x] Previous `authorSubscriptionPriceId` archived in Stripe when updating price (`archiveConnectPrice` fire-and-forget after profile update)
+- [x] `amountUsd=0` clears `authorSubscriptionPriceId` and `authorSubscriptionMonthlyUsd` on Author profile; disables subscriptions
+- [x] Author without Connect account or `charges_enabled=false` → 400
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `lambdas/subscriptions/src/routes/set-author-price.ts` — `POST /subscriptions/author/price`

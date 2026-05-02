@@ -4,7 +4,6 @@
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
 import { TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
 import {
-  NotFoundError,
   UnauthorizedError,
   docClient,
   TABLE_NAME,
@@ -21,7 +20,7 @@ export const unfollowAuthor = async (
   const viewerId = context.userId
 
   const existing = await getFollow(docClient, viewerId, authorId)
-  if (!existing) throw new NotFoundError('Not following this author')
+  if (!existing) return ok({ authorId, unfollowedAt: new Date().toISOString() })
 
   const unfollowedAt = new Date().toISOString()
 

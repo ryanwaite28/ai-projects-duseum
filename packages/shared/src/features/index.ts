@@ -123,15 +123,14 @@ export const getWeekBounds = (
 
 /**
  * Returns an ordered array of ISO week strings that an Author may book,
- * starting from next week up through `advanceWeeks` weeks ahead.
- * Current week is excluded — Authors cannot book the same week they are in.
+ * starting from the current week through `advanceWeeks` weeks ahead (FR-FEAT-14).
  *
- * @param advanceWeeks - How many weeks ahead to allow (from config table, default 8)
+ * @param advanceWeeks - How many weeks ahead to allow beyond the current week (default 8); total options = advanceWeeks + 1
  */
 export const getEligibleWeeks = (advanceWeeks: number): string[] => {
   const current = getCurrentIsoWeek()
   const weeks: string[] = []
-  for (let i = 1; i <= advanceWeeks; i++) {
+  for (let i = 0; i <= advanceWeeks; i++) {
     weeks.push(addWeeks(current, i))
   }
   return weeks

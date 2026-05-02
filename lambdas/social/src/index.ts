@@ -3,11 +3,12 @@
 // social-lambda entry point — Section 4.2, 6.3
 //
 // Routes:
-//   GET    /artworks/{artworkId}/comments           → listCommentsRoute    (public)
-//   POST   /artworks/{artworkId}/comments           → postCommentRoute     (auth)
-//   DELETE /comments/{commentId}                    → deleteCommentRoute   (auth)
-//   PUT    /artworks/{artworkId}/reactions           → upsertReactionRoute  (auth)
-//   DELETE /artworks/{artworkId}/reactions           → deleteReactionRoute  (auth)
+//   GET    /artworks/{artworkId}/comments                          → listCommentsRoute    (public)
+//   POST   /artworks/{artworkId}/comments                          → postCommentRoute     (auth)
+//   DELETE /comments/{commentId}                                   → deleteCommentRoute   (auth)
+//   PUT    /artworks/{artworkId}/comments/{commentId}/pin          → pinCommentRoute      (auth)
+//   PUT    /artworks/{artworkId}/reactions                         → upsertReactionRoute  (auth)
+//   DELETE /artworks/{artworkId}/reactions                         → deleteReactionRoute  (auth)
 // =============================================================================
 
 import middy from '@middy/core'
@@ -22,6 +23,7 @@ import type { DuseumContext } from '@duseum/shared'
 import { listCommentsRoute }   from './routes/list-comments.js'
 import { postCommentRoute }    from './routes/post-comment.js'
 import { deleteCommentRoute }  from './routes/delete-comment.js'
+import { pinCommentRoute }     from './routes/pin-comment.js'
 import { upsertReactionRoute } from './routes/upsert-reaction.js'
 import { deleteReactionRoute } from './routes/delete-reaction.js'
 
@@ -32,6 +34,11 @@ const dispatch = async (
   const { method, path } = event.requestContext.http
   const artworkId  = event.pathParameters?.['artworkId']
   const commentId  = event.pathParameters?.['commentId']
+
+  // /artworks/{artworkId}/comments/{commentId}/pin
+  if (artworkId && commentId && path.endsWith('/pin')) {
+    if (method === 'PUT') return pinCommentRoute(context, artworkId, commentId)
+  }
 
   // /artworks/{artworkId}/comments
   if (artworkId && path.endsWith('/comments')) {

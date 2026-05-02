@@ -17,6 +17,7 @@ import type { DuseumContext } from '@duseum/shared'
 import {
   NotFoundError,
   ValidationError,
+  archiveConnectPrice,
   createConnectPrice,
   docClient,
   getAuthorProfile,
@@ -68,6 +69,8 @@ export const setSubscriptionPrice = async (
     throw new ValidationError('Stripe Connect account is not fully set up. Complete onboarding first.')
   }
 
+  const oldPriceId = author.authorSubscriptionPriceId ?? null
+
   const price = await createConnectPrice(
     {
       unit_amount:  amountUsd * 100,
@@ -82,6 +85,12 @@ export const setSubscriptionPrice = async (
     authorSubscriptionPriceId:    price.id,
     authorSubscriptionMonthlyUsd: amountUsd,
   })
+
+  // Archive the previous price after the profile is updated — fire-and-forget;
+  // a failure here does not affect the caller since the new price is already live.
+  if (oldPriceId) {
+    void archiveConnectPrice(oldPriceId, author.stripeConnectAccountId).catch(() => {/* non-critical */})
+  }
 
   return ok({ priceId: price.id, monthlyUsd: amountUsd })
 }

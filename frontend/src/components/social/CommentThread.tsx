@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../ui/Button'
 import { useAuthStore } from '../../store/auth.store'
-import { useComments, usePostComment, useDeleteComment, useAllComments } from '../../hooks/use-comments'
+import { useMe } from '../../hooks/use-me'
+import { useComments, usePostComment, useDeleteComment, usePinComment, useAllComments } from '../../hooks/use-comments'
 import type { ArtworkComment } from '../../types/artwork'
 
 // ── Comment form ──────────────────────────────────────────────────────────────
@@ -53,20 +54,27 @@ const CommentForm = ({ artworkId, parentCommentId, placeholder = 'Leave a commen
 // ── Single comment ────────────────────────────────────────────────────────────
 
 interface CommentItemProps {
-  comment:   ArtworkComment
-  artworkId: string
-  authorId:  string
-  replies:   ArtworkComment[]
+  comment:       ArtworkComment
+  artworkId:     string
+  artworkAuthorId: string
+  replies:       ArtworkComment[]
+  isAdmin:       boolean
+  pinnedCount:   number
 }
 
-const CommentItem = ({ comment, artworkId, authorId, replies }: CommentItemProps) => {
-  const { user }         = useAuthStore()
+const CommentItem = ({ comment, artworkId, artworkAuthorId, replies, isAdmin, pinnedCount }: CommentItemProps) => {
+  const { user }   = useAuthStore()
   const [replying, setReplying] = useState(false)
   const del = useDeleteComment(artworkId)
-  const canDelete = !!user && (user.userId === comment.authorId || user.userId === authorId)
+  const pin = usePinComment(artworkId)
+
+  const isAuthorOfPiece = !!user && user.userId === artworkAuthorId
+  const canDelete = !!user && (user.userId === comment.authorId || isAuthorOfPiece || isAdmin)
+  const canPin    = isAuthorOfPiece && !comment.parentCommentId
+  const canPinMore = pinnedCount < 2 || comment.isPinned
 
   return (
-    <div className="flex gap-3">
+    <div className={`flex gap-3 ${comment.isPinned ? 'pl-3 border-l-2 border-gold/50' : ''}`}>
       <div className="w-7 h-7 flex-shrink-0 rounded-full bg-ink-soft border border-gold/15 flex items-center justify-center text-[0.6rem] font-medium text-stone-light">
         {comment.authorDisplayName.slice(0, 2).toUpperCase()}
       </div>
@@ -87,6 +95,15 @@ const CommentItem = ({ comment, artworkId, authorId, replies }: CommentItemProps
           {user && !comment.parentCommentId && (
             <button onClick={() => setReplying((v) => !v)} className="text-[0.7rem] font-light text-stone-light hover:text-gold transition-colors">
               {replying ? 'Cancel' : 'Reply'}
+            </button>
+          )}
+          {canPin && canPinMore && (
+            <button
+              onClick={() => pin.mutate(comment.commentId)}
+              disabled={pin.isPending}
+              className="text-[0.7rem] font-light text-stone-light hover:text-gold transition-colors disabled:opacity-50"
+            >
+              {comment.isPinned ? 'Unpin' : 'Pin'}
             </button>
           )}
           {canDelete && (
@@ -117,7 +134,7 @@ const CommentItem = ({ comment, artworkId, authorId, replies }: CommentItemProps
                     </span>
                   </div>
                   <p className="text-[0.83rem] font-light text-parchment-dim leading-[1.7]">{r.body}</p>
-                  {!!user && (user.userId === r.authorId || user.userId === authorId) && (
+                  {!!user && (user.userId === r.authorId || user.userId === artworkAuthorId || isAdmin) && (
                     <button onClick={() => del.mutate(r.commentId)} disabled={del.isPending} className="mt-1 text-[0.7rem] font-light text-stone-light hover:text-[#c0544a] transition-colors">
                       Delete
                     </button>
@@ -144,12 +161,15 @@ interface CommentThreadProps {
 export const CommentThread = ({ artworkId, artworkAuthorId, commentCount, commentsEnabled }: CommentThreadProps) => {
   const { user }    = useAuthStore()
   const navigate    = useNavigate()
+  const { data: me } = useMe()
+  const isAdmin     = me?.account?.systemRole === 'ADMIN'
+
   const allComments = useAllComments(artworkId)
   const { hasNextPage, fetchNextPage, isFetchingNextPage } = useComments(artworkId)
 
-  const pinned   = allComments.filter((c) => c.isPinned && !c.parentCommentId)
-  const topLevel = allComments.filter((c) => !c.isPinned && !c.parentCommentId)
-  const replies  = allComments.filter((c) => !!c.parentCommentId)
+  const pinned     = allComments.filter((c) => c.isPinned && !c.parentCommentId)
+  const topLevel   = allComments.filter((c) => !c.isPinned && !c.parentCommentId)
+  const replies    = allComments.filter((c) => !!c.parentCommentId)
   const getReplies = (id: string) => replies.filter((r) => r.parentCommentId === id)
 
   return (
@@ -158,7 +178,7 @@ export const CommentThread = ({ artworkId, artworkAuthorId, commentCount, commen
         Comments <span className="text-stone-light text-[1rem] font-light ml-2">{commentCount}</span>
       </h2>
 
-      {commentsEnabled && (
+      {commentsEnabled ? (
         <div className="flex gap-4 mb-10">
           <div className="w-8 h-8 flex-shrink-0 rounded-full bg-ink-soft border border-gold/15 flex items-center justify-center text-[0.65rem] text-stone-light">
             {user ? user.email.slice(0, 1).toUpperCase() : '?'}
@@ -173,15 +193,39 @@ export const CommentThread = ({ artworkId, artworkAuthorId, commentCount, commen
             )}
           </div>
         </div>
+      ) : (
+        <div className="mb-10 px-4 py-3 bg-ink-soft border border-gold/10 rounded-sm">
+          <p className="text-[0.82rem] font-light text-stone-light">Comments are disabled for this piece.</p>
+        </div>
       )}
 
       {allComments.length === 0 ? (
         <p className="text-[0.82rem] font-light text-stone-light text-center py-8">No comments yet. Be the first.</p>
       ) : (
         <div className="flex flex-col gap-8">
-          {pinned.map((c) => <CommentItem key={c.commentId} comment={c} artworkId={artworkId} authorId={artworkAuthorId} replies={getReplies(c.commentId)} />)}
+          {pinned.map((c) => (
+            <CommentItem
+              key={c.commentId}
+              comment={c}
+              artworkId={artworkId}
+              artworkAuthorId={artworkAuthorId}
+              replies={getReplies(c.commentId)}
+              isAdmin={isAdmin}
+              pinnedCount={pinned.length}
+            />
+          ))}
           {pinned.length > 0 && topLevel.length > 0 && <div className="border-t border-gold/10" />}
-          {topLevel.map((c) => <CommentItem key={c.commentId} comment={c} artworkId={artworkId} authorId={artworkAuthorId} replies={getReplies(c.commentId)} />)}
+          {topLevel.map((c) => (
+            <CommentItem
+              key={c.commentId}
+              comment={c}
+              artworkId={artworkId}
+              artworkAuthorId={artworkAuthorId}
+              replies={getReplies(c.commentId)}
+              isAdmin={isAdmin}
+              pinnedCount={pinned.length}
+            />
+          ))}
         </div>
       )}
 

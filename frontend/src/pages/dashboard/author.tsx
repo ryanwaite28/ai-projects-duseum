@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { NavLink, useParams, useSearchParams } from 'react-router-dom'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
 import { connectStatusQueryKey } from '../../hooks/use-connect-status'
 import { EyebrowLabel }       from '../../components/ui/EyebrowLabel'
@@ -20,33 +20,35 @@ import { authorDashboardService } from '../../services/author-dashboard.service'
 type TabId = 'overview' | 'pieces' | 'collections' | 'pinned' | 'analytics' | 'features' | 'subscribers'
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'overview',     label: 'Overview'      },
-  { id: 'pieces',       label: 'My Pieces'     },
-  { id: 'collections',  label: 'Collections'   },
-  { id: 'pinned',       label: 'Pinned Pieces'  },
-  { id: 'subscribers',  label: 'Subscribers'   },
-  { id: 'analytics',   label: 'Analytics'     },
-  { id: 'features',    label: 'Feature Slots'  },
+  { id: 'overview',    label: 'Overview'     },
+  { id: 'pieces',      label: 'My Pieces'    },
+  { id: 'collections', label: 'Collections'  },
+  { id: 'pinned',      label: 'Pinned Pieces' },
+  { id: 'subscribers', label: 'Subscribers'  },
+  { id: 'analytics',   label: 'Analytics'    },
+  { id: 'features',    label: 'Feature Slots' },
 ]
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
-function TabBar({ active, onChange }: { active: TabId; onChange: (id: TabId) => void }) {
+function TabBar() {
   return (
     <div className="border-b border-gold/10 mb-8 overflow-x-auto">
       <div className="flex gap-0 min-w-max">
         {TABS.map((tab) => (
-          <button
+          <NavLink
             key={tab.id}
-            onClick={() => onChange(tab.id)}
-            className={`px-5 py-3 text-[0.78rem] font-medium tracking-[0.06em] uppercase transition-colors whitespace-nowrap border-b-2 -mb-px ${
-              active === tab.id
-                ? 'border-gold text-gold'
-                : 'border-transparent text-stone-light hover:text-parchment'
-            }`}
+            to={`/dashboard/author/${tab.id}`}
+            className={({ isActive }) =>
+              `px-5 py-3 text-[0.78rem] font-medium tracking-[0.06em] uppercase transition-colors whitespace-nowrap border-b-2 -mb-px ${
+                isActive
+                  ? 'border-gold text-gold'
+                  : 'border-transparent text-stone-light hover:text-parchment'
+              }`
+            }
           >
             {tab.label}
-          </button>
+          </NavLink>
         ))}
       </div>
     </div>
@@ -93,10 +95,14 @@ function useConnectRedirect() {
 
 // ── Page content ──────────────────────────────────────────────────────────────
 
+const VALID_TABS = new Set<string>(TABS.map((t) => t.id))
+
 function AuthorDashboardContent() {
   const { data: me, isLoading } = useMe()
-  const [activeTab, setActiveTab] = useState<TabId>('overview')
+  const { tab } = useParams<{ tab: string }>()
   const connectToast = useConnectRedirect()
+
+  const activeTab = (VALID_TABS.has(tab ?? '') ? tab : 'overview') as TabId
 
   if (isLoading) {
     return (
@@ -126,7 +132,7 @@ function AuthorDashboardContent() {
           Your Stripe onboarding link expired. Redirecting you back to Stripe…
         </div>
       )}
-      <TabBar active={activeTab} onChange={setActiveTab} />
+      <TabBar />
       {activeTab === 'overview'    && <OverviewTab />}
       {activeTab === 'pieces'      && <PiecesTab />}
       {activeTab === 'collections' && <CollectionsTab />}

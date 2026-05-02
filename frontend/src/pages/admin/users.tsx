@@ -9,16 +9,70 @@ import type { AdminUser, AdminUserFilters } from '../../services/admin.service'
 
 const statusCls = (status: string | undefined) => {
   if (!status || status === 'ACTIVE') return 'text-[#5a9e6e] bg-[#5a9e6e]/10'
-  if (status === 'SUSPENDED')         return 'text-[#c0544a] bg-[#c0544a]/10'
+  if (status === 'SUSPENDED')         return 'text-[--color-error] bg-[--color-error]/10'
   return 'text-stone-light bg-white/[0.04]'
+}
+
+// ── Confirm action modal ───────────────────────────────────────────────────────
+
+const ConfirmActionModal = ({
+  action,
+  user,
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  action:    'suspend' | 'reinstate'
+  user:      AdminUser
+  onConfirm: () => void
+  onCancel:  () => void
+  loading:   boolean
+}) => {
+  const isSuspend = action === 'suspend'
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 backdrop-blur-sm px-4">
+      <div className="bg-ink-soft border border-gold/20 rounded-sm p-7 w-full max-w-md">
+        <p className="text-[0.68rem] font-medium tracking-[0.2em] uppercase text-gold mb-3">
+          Confirm {isSuspend ? 'Suspension' : 'Reinstatement'}
+        </p>
+        <p className="text-parchment-dim text-sm mb-1">
+          {isSuspend ? 'Suspend' : 'Reinstate'} user{' '}
+          <span className="font-mono text-parchment">{user.email}</span>?
+        </p>
+        <p className="text-stone-light text-[0.8rem] mb-6">
+          {isSuspend
+            ? 'The user will lose access to the platform immediately.'
+            : 'The user will regain full access to the platform.'}
+        </p>
+        <div className="flex gap-3 justify-end">
+          <Button variant="secondary" onClick={onCancel} disabled={loading}>
+            Cancel
+          </Button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className={`inline-flex items-center gap-2 font-body text-sm font-medium uppercase tracking-[0.04em] px-6 py-[0.7rem] rounded-sm transition-colors duration-150 disabled:opacity-50 ${
+              isSuspend
+                ? 'bg-[--color-error] hover:bg-[--color-error]/80 text-white'
+                : 'bg-[#5a9e6e] hover:bg-[#5a9e6e]/80 text-white'
+            }`}
+          >
+            {loading
+              ? (isSuspend ? 'Suspending…' : 'Reinstating…')
+              : (isSuspend ? 'Suspend User' : 'Reinstate User')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ── User row ──────────────────────────────────────────────────────────────────
 
 const UserRow = ({ user, onSuspend, onReinstate, loading }: {
   user:        AdminUser
-  onSuspend:   (id: string) => void
-  onReinstate: (id: string) => void
+  onSuspend:   (user: AdminUser) => void
+  onReinstate: (user: AdminUser) => void
   loading:     boolean
 }) => (
   <tr className="border-b border-gold/8 hover:bg-gold/[0.02] transition-colors">
@@ -34,7 +88,7 @@ const UserRow = ({ user, onSuspend, onReinstate, loading }: {
     <td className="py-3 px-4 text-right">
       {user.viewerStatus === 'SUSPENDED' ? (
         <button
-          onClick={() => onReinstate(user.userId)}
+          onClick={() => onReinstate(user)}
           disabled={loading}
           className="text-[0.75rem] font-medium uppercase tracking-[0.06em] text-[#5a9e6e] hover:text-[#5a9e6e]/80 disabled:opacity-40 transition-colors"
         >
@@ -42,9 +96,9 @@ const UserRow = ({ user, onSuspend, onReinstate, loading }: {
         </button>
       ) : (
         <button
-          onClick={() => onSuspend(user.userId)}
+          onClick={() => onSuspend(user)}
           disabled={loading}
-          className="text-[0.75rem] font-medium uppercase tracking-[0.06em] text-[#c0544a] hover:text-[#c0544a]/80 disabled:opacity-40 transition-colors"
+          className="text-[0.75rem] font-medium uppercase tracking-[0.06em] text-[--color-error] hover:text-[--color-error]/80 disabled:opacity-40 transition-colors"
         >
           Suspend
         </button>
@@ -62,6 +116,7 @@ export default function AdminUsersPage() {
   const [cursor, setCursor] = useState<string | undefined>(undefined)
   const [allUsers, setAllUsers] = useState<AdminUser[]>([])
   const [mutatingId, setMutatingId] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<{ action: 'suspend' | 'reinstate'; user: AdminUser } | null>(null)
 
   const filters: AdminUserFilters = { limit: 20, ...(email && { email }), ...(status && { status }), ...(cursor && { cursor }) }
 
@@ -75,22 +130,38 @@ export default function AdminUsersPage() {
     staleTime: 0,
   })
 
+  const onSettled = () => {
+    setMutatingId(null)
+    setConfirming(null)
+    setAllUsers([])
+    setCursor(undefined)
+    void qc.invalidateQueries({ queryKey: ['admin', 'users'] })
+  }
+
   const suspend = useMutation({
     mutationFn: (userId: string) => adminService.suspendUser(userId),
     onMutate:   (id) => setMutatingId(id),
-    onSettled:  () => { setMutatingId(null); setAllUsers([]); setCursor(undefined); qc.invalidateQueries({ queryKey: ['admin', 'users'] }) },
+    onSettled,
   })
 
   const reinstate = useMutation({
     mutationFn: (userId: string) => adminService.reinstateUser(userId),
     onMutate:   (id) => setMutatingId(id),
-    onSettled:  () => { setMutatingId(null); setAllUsers([]); setCursor(undefined); qc.invalidateQueries({ queryKey: ['admin', 'users'] }) },
+    onSettled,
   })
+
+  const handleConfirm = () => {
+    if (!confirming) return
+    if (confirming.action === 'suspend') suspend.mutate(confirming.user.userId)
+    else reinstate.mutate(confirming.user.userId)
+  }
 
   const handleSearch = () => {
     setAllUsers([])
     setCursor(undefined)
   }
+
+  const isMutating = suspend.isPending || reinstate.isPending
 
   return (
     <AdminLayout title="Users">
@@ -130,7 +201,7 @@ export default function AdminUsersPage() {
       </div>
 
       {error && (
-        <p className="text-[#c0544a] text-sm mb-4">Failed to load users.</p>
+        <p className="text-[--color-error] text-sm mb-4">Failed to load users.</p>
       )}
 
       {/* ── Table ───────────────────────────────────────────────────────────── */}
@@ -149,8 +220,8 @@ export default function AdminUsersPage() {
               <UserRow
                 key={u.userId}
                 user={u}
-                onSuspend={(id) => suspend.mutate(id)}
-                onReinstate={(id) => reinstate.mutate(id)}
+                onSuspend={(user) => setConfirming({ action: 'suspend', user })}
+                onReinstate={(user) => setConfirming({ action: 'reinstate', user })}
                 loading={mutatingId === u.userId}
               />
             ))}
@@ -172,6 +243,17 @@ export default function AdminUsersPage() {
             {isFetching ? 'Loading…' : 'Load more'}
           </Button>
         </div>
+      )}
+
+      {/* ── Confirmation modal ──────────────────────────────────────────────── */}
+      {confirming && (
+        <ConfirmActionModal
+          action={confirming.action}
+          user={confirming.user}
+          onConfirm={handleConfirm}
+          onCancel={() => setConfirming(null)}
+          loading={isMutating}
+        />
       )}
     </AdminLayout>
   )

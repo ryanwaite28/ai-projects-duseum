@@ -1,6 +1,6 @@
 ## Spec: Daily Featured Author
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-FEAT-01, FR-FEAT-02, FR-FEAT-03, FR-FEAT-04, FR-FEAT-05, FR-FEAT-06, FR-FEAT-07
 **Relevant PROJECT.md sections**: 2.11, 4.2, 4.7, 8
 
@@ -9,11 +9,11 @@
 **Prerequisites**: DynamoDB config table deployed; `packages/shared/src/features/daily-selection.ts` created; EventBridge daily rule (`cron(0 0 * * ? *)`) wired to `maintenance-lambda`; `users/author-onboarding.md` complete (Author records exist)
 
 **Done when**:
-- [ ] Daily selection excludes Authors from last 7 `DAILY_FEATURED_HISTORY` entries
-- [ ] Empty eligible Author pool → graceful fallback (previous selection kept; no crash or error)
-- [ ] Admin override writes `isOverride=true` and `overriddenBy=adminId`; does NOT write to `DAILY_FEATURED_HISTORY`
-- [ ] `GET /features/daily` returns spotlight data with no auth required (unauthenticated → 200)
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] Daily selection excludes Authors from last 7 `DAILY_FEATURED_HISTORY` entries
+- [x] Empty eligible Author pool → graceful fallback (previous selection kept; no crash or error)
+- [x] Admin override writes `isOverride=true` and `overriddenBy=adminId`; does NOT write to `DAILY_FEATURED_HISTORY`
+- [x] `GET /features/daily` returns spotlight data with no auth required (unauthenticated → 200)
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `lambdas/maintenance/src/handlers/daily-feature.ts` — `selectDailyFeaturedAuthor()` — selection algorithm

@@ -102,14 +102,14 @@ describe('POST /collections', () => {
 
     const res = await callHandler(makeEvent('POST', '/collections', {
       userId: AUTHOR_ID,
-      body:   { title: 'My First Collection', description: 'A test.', isPublic: true },
+      body:   { title: 'My First Collection', description: 'A test.', visibility: 'FREE' },
     }))
 
     expect(res.statusCode).toBe(201)
     const body = JSON.parse(res.body)
     expect(body.collectionId).toBeTruthy()
     expect(body.title).toBe('My First Collection')
-    expect(body.isPublic).toBe(true)
+    expect(body.visibility).toBe('FREE')
     expect(body.ownerId).toBe(AUTHOR_ID)
   })
 
@@ -147,7 +147,7 @@ describe('Collection lifecycle: add pieces → GET access-tier filtering', () =>
     // Create collection
     const createRes = await callHandler(makeEvent('POST', '/collections', {
       userId: AUTHOR_ID,
-      body:   { title: 'Mixed Visibility', isPublic: true },
+      body:   { title: 'Mixed Visibility', visibility: 'FREE' },
     }))
     expect(createRes.statusCode).toBe(201)
     const { collectionId } = JSON.parse(createRes.body) as { collectionId: string }
@@ -201,7 +201,7 @@ describe('Collection lifecycle: add pieces → GET access-tier filtering', () =>
 
     const createRes = await callHandler(makeEvent('POST', '/collections', {
       userId: AUTHOR_ID,
-      body:   { title: 'Owner View Test', isPublic: true },
+      body:   { title: 'Owner View Test', visibility: 'FREE' },
     }))
     const { collectionId } = JSON.parse(createRes.body) as { collectionId: string }
 
@@ -230,16 +230,16 @@ describe('Collection lifecycle: add pieces → GET access-tier filtering', () =>
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PRIVATE collection visibility
+// SUBSCRIBER_ONLY collection visibility
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('PRIVATE collection access control', () => {
-  it('returns 403 to unauthenticated viewer for PRIVATE collection', async () => {
+describe('SUBSCRIBER_ONLY collection access control', () => {
+  it('returns 403 to unauthenticated viewer for SUBSCRIBER_ONLY collection', async () => {
     await seedAuthorProfile()
 
     const createRes = await callHandler(makeEvent('POST', '/collections', {
       userId: AUTHOR_ID,
-      body:   { title: 'Private Collection', isPublic: false },
+      body:   { title: 'Subscriber-Only Collection', visibility: 'SUBSCRIBER_ONLY' },
     }))
     const { collectionId } = JSON.parse(createRes.body) as { collectionId: string }
 
@@ -250,12 +250,12 @@ describe('PRIVATE collection access control', () => {
     expect(res.statusCode).toBe(403)
   })
 
-  it('returns 403 to non-subscriber for PRIVATE collection', async () => {
+  it('returns 403 to non-subscriber for SUBSCRIBER_ONLY collection', async () => {
     await seedAuthorProfile()
 
     const createRes = await callHandler(makeEvent('POST', '/collections', {
       userId: AUTHOR_ID,
-      body:   { title: 'Private Collection 2', isPublic: false },
+      body:   { title: 'Subscriber-Only Collection 2', visibility: 'SUBSCRIBER_ONLY' },
     }))
     const { collectionId } = JSON.parse(createRes.body) as { collectionId: string }
 
@@ -266,12 +266,12 @@ describe('PRIVATE collection access control', () => {
     expect(res.statusCode).toBe(403)
   })
 
-  it('returns 200 to active Author subscriber for PRIVATE collection', async () => {
+  it('returns 200 to active Author subscriber for SUBSCRIBER_ONLY collection', async () => {
     await Promise.all([seedAuthorProfile(), seedAuthorSubscription(SUBSCRIBER)])
 
     const createRes = await callHandler(makeEvent('POST', '/collections', {
       userId: AUTHOR_ID,
-      body:   { title: 'Subscriber-Only', isPublic: false },
+      body:   { title: 'Subscriber-Only', visibility: 'SUBSCRIBER_ONLY' },
     }))
     const { collectionId } = JSON.parse(createRes.body) as { collectionId: string }
 
@@ -395,18 +395,18 @@ describe('DELETE /collections/{collectionId}/pieces/{artworkId}', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('GET /authors/{authorId}/collections', () => {
-  it('returns only PUBLIC collections for the author', async () => {
+  it('returns only FREE collections for unauthenticated viewers', async () => {
     await seedAuthorProfile()
 
-    // Public collection
+    // FREE collection
     await callHandler(makeEvent('POST', '/collections', {
       userId: AUTHOR_ID,
-      body:   { title: 'Public Col', isPublic: true },
+      body:   { title: 'Free Col', visibility: 'FREE' },
     }))
-    // Private collection
+    // SUBSCRIBER_ONLY collection
     await callHandler(makeEvent('POST', '/collections', {
       userId: AUTHOR_ID,
-      body:   { title: 'Private Col', isPublic: false },
+      body:   { title: 'Subscriber Col', visibility: 'SUBSCRIBER_ONLY' },
     }))
 
     const res = await callHandler(makeEvent('GET', `/authors/${AUTHOR_ID}/collections`, {
@@ -415,6 +415,6 @@ describe('GET /authors/{authorId}/collections', () => {
     expect(res.statusCode).toBe(200)
     const body = JSON.parse(res.body)
     expect(body.items).toHaveLength(1)
-    expect(body.items[0].title).toBe('Public Col')
+    expect(body.items[0].title).toBe('Free Col')
   })
 })

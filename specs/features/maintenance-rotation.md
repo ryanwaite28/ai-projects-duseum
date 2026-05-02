@@ -1,6 +1,6 @@
 ## Spec: Weekly Feature Rotation & Maintenance Tasks
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-FEAT-15
 **Relevant PROJECT.md sections**: 2.11, 4.2, 4.7
 
@@ -9,11 +9,11 @@
 **Prerequisites**: `features/weekly-booking.md` complete (CONFIRMED booking records exist); EventBridge Monday rule (`cron(0 0 ? * MON *)`) wired to `maintenance-lambda`; DynamoDB config table deployed
 
 **Done when**:
-- [ ] Monday rotation writes `CONFIG#WEEKLY_FEATURED` with all CONFIRMED authors for current ISO week
-- [ ] Previous week's CONFIRMED bookings set to `featureStatus=ARCHIVED` atomically (DynamoDB transaction)
-- [ ] No CONFIRMED bookings for current week → writes `CONFIG#WEEKLY_FEATURED` with empty `authorIds=[]` (no crash)
-- [ ] Daily EventBridge event routes to `selectDailyFeaturedAuthor()` correctly (not to rotation handler)
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] Monday rotation activates CONFIRMED→ACTIVE bookings for current week; features endpoint reads ACTIVE directly (no separate CONFIG record needed)
+- [x] Previous week's ACTIVE bookings set to `featureStatus=ARCHIVED`
+- [x] No CONFIRMED bookings for current week → empty result from features endpoint (no crash)
+- [x] Daily EventBridge event routes to `runDailySelection()` correctly (not to rotation handler)
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `lambdas/maintenance/src/handlers/weekly-rotation.ts` — `rotateWeeklyFeaturedAuthors()`

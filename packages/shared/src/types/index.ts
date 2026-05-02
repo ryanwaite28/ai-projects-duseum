@@ -139,12 +139,14 @@ export type Follow = {
 // ── Collections ───────────────────────────────────────────────────────────────
 
 // DynamoDB key: COLLECTION#{collectionId} | METADATA
+export type CollectionVisibility = 'FREE' | 'SUBSCRIBER_ONLY'
+
 export type Collection = {
   collectionId: string
   ownerId: string             // userId
   title: string
   description: string
-  isPublic: boolean
+  visibility: CollectionVisibility  // immutable after creation (FR-COL-03)
   createdAt: string
   updatedAt: string
 }

@@ -49,7 +49,9 @@ const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
       }
       return retry.json() as Promise<T>
     }
-    throw new ApiError(401, 'Unauthorized')
+    // Refresh failed — session is gone; redirect to login
+    window.location.href = '/login'
+    throw new ApiError(401, 'Session expired')
   }
 
   if (!res.ok) {

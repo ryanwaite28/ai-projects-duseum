@@ -21,7 +21,7 @@ import {
 const CreateCollectionSchema = z.object({
   title:       z.string().min(1).max(100),
   description: z.string().max(500).optional().default(''),
-  isPublic:    z.boolean().optional().default(true),
+  visibility:  z.enum(['FREE', 'SUBSCRIBER_ONLY']).default('FREE'),
 })
 
 export const createCollectionRoute = async (
@@ -42,12 +42,12 @@ export const createCollectionRoute = async (
 
   const collection = {
     collectionId,
-    ownerId:     userId,
-    title:       body.title,
+    ownerId:    userId,
+    title:      body.title,
     description: body.description,
-    isPublic:    body.isPublic,
-    createdAt:   now,
-    updatedAt:   now,
+    visibility: body.visibility,
+    createdAt:  now,
+    updatedAt:  now,
   }
 
   await createCollection(docClient, collection)
