@@ -30,9 +30,9 @@ describe('GET /features/weekly/availability', () => {
     expect(result.statusCode).toBe(200)
     const body = JSON.parse(result.body!)
 
-    // WEEKLY_FEATURE_ADVANCE_WEEKS = 8, seeded in setup.ts
-    expect(body.weeks).toHaveLength(8)
-    expect(body.feeFeeUsd).toBe(25)
+    // WEEKLY_FEATURE_ADVANCE_WEEKS = 8 → current week + 8 ahead = 9 options (FR-FEAT-14)
+    expect(body.weeks).toHaveLength(9)
+    expect(body.feeUsd).toBe(25)
 
     const firstWeek = body.weeks.find((w: { isoWeek: string }) => w.isoWeek === week1)
     expect(firstWeek.slotsAvailable).toBe(8)  // 10 slots - 2 confirmed

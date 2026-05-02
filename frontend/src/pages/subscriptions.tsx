@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { PageLayout } from '../components/layout/PageLayout'
 import { EyebrowLabel } from '../components/ui/EyebrowLabel'
 import { GoldDivider } from '../components/ui/GoldDivider'
 import { Button } from '../components/ui/Button'
+import { PlatformSubscribeCTA } from '../components/subscription/PlatformSubscribeCTA'
 import { useSubscriptions } from '../hooks/use-subscriptions'
 import { subscriptionsService } from '../services/subscriptions.service'
 import type { ApiError } from '../services/api'
@@ -62,22 +64,19 @@ export default function SubscriptionsPage() {
                   {portalMutation.isPending ? '…' : 'Manage billing'}
                 </Button>
                 {portalError && (
-                  <p className="text-[0.72rem] text-[#c0544a]">{portalError}</p>
+                  <div className="text-right">
+                    <p className="text-[0.72rem] text-[#c0544a]">{portalError}</p>
+                    {portalError.includes('Subscribe') && (
+                      <Link to="/settings/subscriptions" className="text-[0.72rem] text-gold hover:text-gold-light underline">
+                        Subscribe now →
+                      </Link>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
           ) : (
-            <div className="bg-ink border border-gold/15 rounded-sm p-6 flex items-center justify-between gap-6">
-              <div>
-                <p className="text-[0.72rem] font-medium tracking-[0.14em] uppercase text-stone-light mb-1">Free tier</p>
-                <p className="text-[0.88rem] font-light text-stone-light">
-                  Upgrade to unlock the full collection.
-                </p>
-              </div>
-              <Button variant="primary" onClick={() => { setPortalError(null); portalMutation.mutate() }} disabled={portalMutation.isPending}>
-                {portalMutation.isPending ? '…' : 'Upgrade'}
-              </Button>
-            </div>
+            <PlatformSubscribeCTA />
           )}
         </div>
       </section>

@@ -44,6 +44,15 @@ export const getStripeWebhookSecret = async (): Promise<string> => {
   return _stripeWebhookSecret
 }
 
+// Connect webhook receives account.updated only (events from connected Express accounts).
+// Account webhook receives platform-account events: payment_intent.*, customer.subscription.*, invoice.*, etc.
+let _stripeAccountWebhookSecret: string | undefined
+export const getStripeAccountWebhookSecret = async (): Promise<string> => {
+  if (_stripeAccountWebhookSecret) return _stripeAccountWebhookSecret
+  _stripeAccountWebhookSecret = await get(`duseum/${ENV}/stripe/webhook-secret-account`)
+  return _stripeAccountWebhookSecret
+}
+
 // ── CloudFront signed URLs ────────────────────────────────────────────────────
 
 let _cloudfrontPrivateKey: string | undefined

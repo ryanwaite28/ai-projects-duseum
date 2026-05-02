@@ -1,6 +1,6 @@
 ## Spec: Weekly Feature Booking (Paid)
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-FEAT-08, FR-FEAT-09, FR-FEAT-10, FR-FEAT-11, FR-FEAT-12, FR-FEAT-13, FR-FEAT-14, FR-FEAT-16, FR-FEAT-17, FR-FEAT-18
 **Relevant PROJECT.md sections**: 2.11, 4.2, 4.5, 4.7, 8
 
@@ -9,11 +9,11 @@
 **Prerequisites**: `packages/shared/src/features/booking-eligibility.ts` created; SSM config params for `weekly_feature_fee_cents` and `weekly_feature_max_slots` seeded; Stripe secret in Secrets Manager; `subscriptions/webhook-processing.md` complete (handles `payment_intent.*` events); `features-lambda` deployed
 
 **Done when**:
-- [ ] `checkBookingEligibility()` rejects Author with CONFIRMED booking in last 3 months → 409 (FR-FEAT-11)
-- [ ] Fully-booked week (slot count at max) rejects new booking → 409; `isoWeek` > 8 weeks from now → 400
-- [ ] `payment_intent.succeeded` webhook sets booking `featureStatus=CONFIRMED`; `payment_intent.payment_failed` sets `featureStatus=CANCELLED, cancelledBy=STRIPE_PAYMENT_FAILED`
-- [ ] `GET /features/weekly/available` returns correct `available: boolean` per week based on current CONFIRMED count vs SSM max
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] `checkBookingEligibility()` rejects Author with CONFIRMED booking in last 3 months → 409 (FR-FEAT-11)
+- [x] Fully-booked week (slot count at max) rejects new booking → 409; `isoWeek` > 8 weeks from now → 400
+- [x] `payment_intent.succeeded` webhook sets booking `featureStatus=CONFIRMED`; `payment_intent.payment_failed` sets `featureStatus=CANCELLED, cancelledBy=STRIPE_PAYMENT_FAILED`
+- [x] `GET /features/weekly/available` returns correct `available: boolean` per week based on current CONFIRMED count vs SSM max
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `lambdas/features/src/routes/book-weekly-feature.ts` — `POST /features/weekly/book`

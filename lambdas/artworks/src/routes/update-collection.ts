@@ -29,10 +29,9 @@ const PieceOrderEntrySchema = z.object({
 const UpdateCollectionSchema = z.object({
   title:       z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
-  isPublic:    z.boolean().optional(),
   pieceOrder:  z.array(PieceOrderEntrySchema).optional(),
 }).refine(
-  (v) => v.title !== undefined || v.description !== undefined || v.isPublic !== undefined || v.pieceOrder !== undefined,
+  (v) => v.title !== undefined || v.description !== undefined || v.pieceOrder !== undefined,
   { message: 'At least one field must be provided' }
 )
 
@@ -50,10 +49,9 @@ export const updateCollectionRoute = async (
   const body = validateBody(UpdateCollectionSchema, event.body)
 
   // Update metadata fields if any provided
-  const metaPatch: { title?: string; description?: string; isPublic?: boolean } = {}
+  const metaPatch: { title?: string; description?: string } = {}
   if (body.title       !== undefined) metaPatch.title       = body.title
   if (body.description !== undefined) metaPatch.description = body.description
-  if (body.isPublic    !== undefined) metaPatch.isPublic    = body.isPublic
 
   let updated = collection
   if (Object.keys(metaPatch).length > 0) {

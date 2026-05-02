@@ -13,6 +13,7 @@ import {
   deleteObject,
   docClient,
   getArtPiece,
+  logger,
   ok,
 } from '@duseum/shared'
 
@@ -20,7 +21,7 @@ const MEDIA_BUCKET = process.env.MEDIA_BUCKET!
 
 export const removeArtwork = async (
   _event: APIGatewayProxyEventV2,
-  _context: DuseumContext,
+  context: DuseumContext,
   artworkId: string
 ): Promise<APIGatewayProxyStructuredResultV2> => {
   const artwork = await getArtPiece(docClient, artworkId)
@@ -33,6 +34,8 @@ export const removeArtwork = async (
     archiveArtPiece(docClient, artworkId, now),
     deleteObject(MEDIA_BUCKET, artwork.s3Key),
   ])
+
+  logger.info('Admin removed artwork', { artworkId, removedBy: context.userId, removedAt: now })
 
   return ok({ artworkId, status: 'ARCHIVED', removedAt: now })
 }

@@ -12,6 +12,35 @@ You are a **master systems design architect, DevOps & Software Engineer**. Apply
 
 ---
 
+## Mandatory Process — No Exceptions
+
+**Every change — no matter how small — must follow this exact sequence:**
+
+1. **Read PROJECT.md** — find the relevant section(s) before touching any code
+2. **Read the existing spec** in `specs/` for the affected area (if one exists)
+3. **Write or update a spec** using the Section 13.7 format below; for test-only fixes, state explicitly which side (implementation or test) is wrong and why, with PROJECT.md/spec citations
+4. **Wait for the user to reply: "Approved — proceed."** — do not write implementation code until this exact phrase is received
+5. **Implement** — only the files listed in the approved spec
+6. **Update the spec** — tick done-when checkboxes, set Status to ✅ Implemented
+
+**This process applies to ALL of the following — no category is exempt:**
+- New routes, handlers, or Lambda functions
+- Changes to existing business logic (even one-liners)
+- DynamoDB access pattern additions or changes
+- IAM policy additions
+- New or changed Secrets Manager / SSM keys
+- Infrastructure (CDK stack) changes
+- Shared package (`packages/shared`) additions or changes
+- Test fixes or corrections (failing CI, wrong assertions, missing fixtures)
+- Frontend component changes, style corrections, or copy edits
+- Config value changes or environment variable additions
+
+**Never skip steps 1–4** — not for "obvious" fixes, not for single-line changes, not for CI failures, not for test expectation corrections. The spec IS the approval gate — a "yes sounds good" or "approve" in chat is not an approval to write code. Only the exact phrase **"Approved — proceed."** unlocks implementation.
+
+> **Why this matters**: skipping the spec gate — even for a 1-line test fix — risks changing the wrong side of a contract (e.g. fixing a correct test to match a wrong implementation, or vice versa). The spec step forces alignment with PROJECT.md before any file is touched.
+
+---
+
 ## Project Identity
 
 - **Project**: Duseum — serverless digital museum platform
@@ -30,8 +59,10 @@ These resources already exist in account `408141212087`. Reference them, never r
 | ACM certificates (us-east-1) | ✅ Exists | `Certificate.fromCertificateArn(this, 'Cert', certArn)` — ARN from SSM/context |
 | SES domain verification for `duseum.com` | ✅ Exists | No CDK action needed |
 | SES email identity `no-reply@duseum.com` | ✅ Exists | No CDK action needed |
-| Stripe webhook endpoint (dev) | ✅ Exists | `https://api.dev.duseum.com/webhooks/stripe` — destination ID: `we_1TMiBcDeejIUwJISRTd0wITw` |
-| Stripe webhook endpoint (prod) | ✅ Exists | `https://api.prod.duseum.com/webhooks/stripe` — destination ID: `we_1TMiH8RUKQLlSd6oP9UMFQ3C` |
+| Stripe Connect webhook (dev) | ✅ Exists | `https://api.dev.duseum.com/webhooks/stripe` — destination ID: `we_1TMiBcDeejIUwJISRTd0wITw` — "Events from: Connected accounts" |
+| Stripe Connect webhook (prod) | ✅ Exists | `https://api.prod.duseum.com/webhooks/stripe` — destination ID: `we_1TMiH8RUKQLlSd6oP9UMFQ3C` — "Events from: Connected accounts" |
+| Stripe Account webhook (dev) | ✅ Exists | `https://api.dev.duseum.com/webhooks/stripe` — destination ID: `we_1TSHYrDeejIUwJISbtordMME` — "Events from: Your account" |
+| Stripe Account webhook (prod) | ✅ Exists | `https://api.prod.duseum.com/webhooks/stripe` — destination ID: `we_1TSHcWRUKQLlSd6o23Jx4hyx` — "Events from: Your account" |
 | Secrets Manager secrets (dev + prod) | ✅ Seeded | All Stripe keys, CloudFront private key, unsubscribe HMAC secret — see PHASE-0.4 |
 
 ## AWS CLI
@@ -44,10 +75,10 @@ These resources already exist in account `408141212087`. Reference them, never r
 
 Two separate Stripe accounts — one per environment:
 
-| Env | Account ID | Connect Client ID | Webhook Destination ID |
-|---|---|---|---|
-| dev | `acct_1TMYUPDeejIUwJIS` | `ca_ULF5h4bUlGnwEo3YRUioqoI8hogxwvcb` | `we_1TMiBcDeejIUwJISRTd0wITw` |
-| prod | `acct_1TMYUIRUKQLlSd6o` | `ca_ULF9jsCeRlmkF08gQBXwDqivNgiw38lA` | `we_1TMiH8RUKQLlSd6oP9UMFQ3C` |
+| Env | Account ID | Connect Client ID | Connect Webhook ID | Account Webhook ID |
+|---|---|---|---|---|
+| dev | `acct_1TMYUPDeejIUwJIS` | `ca_ULF5h4bUlGnwEo3YRUioqoI8hogxwvcb` | `we_1TMiBcDeejIUwJISRTd0wITw` | `we_1TSHYrDeejIUwJISbtordMME` |
+| prod | `acct_1TMYUIRUKQLlSd6o` | `ca_ULF9jsCeRlmkF08gQBXwDqivNgiw38lA` | `we_1TMiH8RUKQLlSd6oP9UMFQ3C` | `we_1TSHcWRUKQLlSd6o23Jx4hyx` |
 
 **Extra subscribed webhook events** (beyond PROJECT.md spec): The webhook endpoints also receive `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.payment_succeeded`, `subscription_schedule.*`, `customer.subscription.trial_will_end`, and `account.updated`. The `subscriptions-webhook-lambda` must handle all of these gracefully:
 - `customer.subscription.paused` → update Subscription status to `PAUSED` in DynamoDB

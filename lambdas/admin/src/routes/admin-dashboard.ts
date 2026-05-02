@@ -18,7 +18,7 @@ import {
 import { cognitoDescribeUserPool } from '../cognito.js'
 import { getDlqDepth } from '../sqs.js'
 
-type BookingItem = { isoWeek: string; featureStatus: string }
+type BookingItem = { isoWeek: string; featureStatus: string; amountPaidUsd?: number }
 
 export const adminDashboard = async (
   _event: APIGatewayProxyEventV2,
@@ -80,6 +80,10 @@ export const adminDashboard = async (
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([isoWeek, counts]) => ({ isoWeek, ...counts }))
 
+  // Sum amountPaidUsd across all CONFIRMED + ACTIVE bookings already fetched
+  const weeklyFeatureRevenueUsd = [...confirmedItems, ...activeItems]
+    .reduce((sum, b) => sum + (b.amountPaidUsd ?? 0), 0)
+
   return ok({
     totalUsers:            estimatedNumberOfUsers,
     activePlatformSubs,
@@ -87,6 +91,7 @@ export const adminDashboard = async (
     platformMrrUsd:        platformMrrCents / 100,
     newSignups7d:          newSignups7d  >= 0 ? newSignups7d  : null,
     newSignups30d:         newSignups30d >= 0 ? newSignups30d : null,
+    weeklyFeatureRevenueUsd,
     dlqDepths: {
       stripeWebhook:       stripeWebhookDepth,
       notifications:       notificationsDepth,

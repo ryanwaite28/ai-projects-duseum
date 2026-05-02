@@ -5,8 +5,10 @@ import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
 import { TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
 import {
   ConflictError,
+  ForbiddenError,
   NotFoundError,
   UnauthorizedError,
+  ValidationError,
   docClient,
   TABLE_NAME,
   getAuthorProfile,
@@ -23,12 +25,15 @@ export const followAuthor = async (
   if (!context.userId) throw new UnauthorizedError()
   const viewerId = context.userId
 
+  if (viewerId === authorId) throw new ValidationError('You cannot follow yourself.')
+
   const [author, viewer, existing] = await Promise.all([
     getAuthorProfile(docClient, authorId),
     getViewerProfile(docClient, viewerId),
     getFollow(docClient, viewerId, authorId),
   ])
 
+  if (!viewer || viewer.status !== 'ACTIVE') throw new ForbiddenError('Active viewer profile required.')
   if (!author) throw new NotFoundError('Author not found')
   if (existing) throw new ConflictError('Already following this author')
 

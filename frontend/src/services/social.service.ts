@@ -27,4 +27,7 @@ export const socialService = {
 
   deleteReaction: (artworkId: string) =>
     api.delete<{ artworkId: string }>(`/artworks/${artworkId}/reactions`),
+
+  pinComment: (artworkId: string, commentId: string) =>
+    api.put<{ commentId: string; isPinned: boolean }>(`/artworks/${artworkId}/comments/${commentId}/pin`, {}),
 }

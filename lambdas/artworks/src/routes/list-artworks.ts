@@ -36,11 +36,11 @@ const VALID_CATEGORIES = new Set<string>([
   'ILLUSTRATION', 'MIXED_MEDIA', 'OTHER',
 ])
 
+// Only newest is supported in v1 — trending/most-viewed require a trendScore GSI (deferred)
+const VALID_SORTS = new Set<string>(['newest'])
+
 const MAX_LIMIT     = 50
 const DEFAULT_LIMIT = 20
-
-// Fields stripped from locked items so thumbnails and full metadata are withheld.
-const LOCKED_FIELDS_TO_KEEP = new Set(['artworkId', 'authorId', 'title', 'category', 'createdAt'])
 
 type AnnotatedItem = ArtPiece & {
   thumbnailUrl?: string
@@ -56,6 +56,11 @@ export const listArtworks = async (
   const limitRaw = q['limit'] ? parseInt(q['limit'], 10) : DEFAULT_LIMIT
   if (isNaN(limitRaw) || limitRaw < 1) throw new ValidationError('limit must be a positive integer')
   const limit = Math.min(limitRaw, MAX_LIMIT)
+
+  const sort = q['sort'] ?? 'newest'
+  if (!VALID_SORTS.has(sort)) {
+    throw new ValidationError(`Invalid sort. Supported values: ${[...VALID_SORTS].join(', ')}`)
+  }
 
   const category = q['category']
   if (category && !VALID_CATEGORIES.has(category)) {

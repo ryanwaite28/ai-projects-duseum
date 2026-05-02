@@ -6,7 +6,7 @@
 
 **What this implements**: SQS-triggered Lambda handling all Stripe webhook events: subscription lifecycle, invoice events, Payment Intent events (weekly feature), account.updated (Connect); idempotency via DynamoDB table.
 
-**Prerequisites**: SQS stripe webhook queue + idempotency DynamoDB table deployed; `upsertSubscription()` in shared repo; Stripe webhook secret in Secrets Manager; MiniStack running for integration tests
+**Prerequisites**: SQS stripe webhook queue + idempotency DynamoDB table deployed; `upsertSubscription()` in shared repo; **two** Stripe webhook secrets in Secrets Manager (`webhook-secret` Connect + `webhook-secret-account` Account); MiniStack running for integration tests
 
 **Done when**:
 - [ ] All 14 event types in the spec's event map handled correctly (verified by integration tests against MiniStack)
@@ -47,7 +47,7 @@
 **Business logic**:
 1. SQS handler loops over `event.Records`; each record processed independently (partial batch failure)
 2. Per record: parse SQS body → extract `rawBody` + `stripeSignature`
-3. Retrieve webhook secret from Secrets Manager; verify Stripe signature (`constructWebhookEvent`)
+3. Verify Stripe signature — try Account webhook secret (`webhook-secret-account`) first; on `StripeSignatureVerificationError` fall back to Connect webhook secret (`webhook-secret`). Both secrets cached module-level. Second failure → `batchItemFailure` (poison pill).
 4. Check idempotency table — if `STRIPE#{eventId}` exists → skip (already processed)
 5. Dispatch to event handler → on success → write idempotency record with 7-day TTL
 6. Any unhandled error → add `messageId` to `batchItemFailures` (SQS retry)

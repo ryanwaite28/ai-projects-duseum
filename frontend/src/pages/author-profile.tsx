@@ -1,22 +1,15 @@
-import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useParams } from 'react-router-dom'
 import { EyebrowLabel } from '../components/ui/EyebrowLabel'
-import { Button } from '../components/ui/Button'
 import { GoldDivider } from '../components/ui/GoldDivider'
 import { PageLayout } from '../components/layout/PageLayout'
 import { ArtworkGrid } from '../components/artwork/ArtworkGrid'
 import { FollowButton } from '../components/social/FollowButton'
+import { AuthorSubscribeCTA } from '../components/subscription/AuthorSubscribeCTA'
 import { useAuthor, useAuthorCollections } from '../hooks/use-author'
 import { useSubscriptions } from '../hooks/use-subscriptions'
-import { useAuthStore } from '../store/auth.store'
-import { subscriptionsService } from '../services/subscriptions.service'
-import type { ApiError } from '../services/api'
 
 export default function AuthorProfilePage() {
   const { authorId } = useParams<{ authorId: string }>()
-  const navigate      = useNavigate()
-  const { user }      = useAuthStore()
 
   const { data: author, isLoading, error } = useAuthor(authorId ?? '')
   const { data: collectionsData } = useAuthorCollections(authorId ?? '')
@@ -24,22 +17,6 @@ export default function AuthorProfilePage() {
 
   const { hasAuthorSub } = useSubscriptions()
   const alreadySubscribed = authorId ? hasAuthorSub(authorId) : false
-
-  const [subError, setSubError] = useState<string | null>(null)
-  const checkoutMutation = useMutation({
-    mutationFn: () => subscriptionsService.createAuthorCheckout(authorId!),
-    onSuccess:  (data) => { window.location.href = data.checkoutUrl },
-    onError:    (err: ApiError) => setSubError(err.message ?? 'Could not start checkout.'),
-  })
-
-  const handleSubscribe = () => {
-    if (!user) {
-      navigate(`/login?return=/authors/${authorId}`)
-      return
-    }
-    setSubError(null)
-    checkoutMutation.mutate()
-  }
 
   if (isLoading) {
     return (
@@ -67,7 +44,8 @@ export default function AuthorProfilePage() {
     )
   }
 
-  const hasSubscription = author.authorSubscriptionPriceUsd != null
+  const hasSubscription =
+    author.authorSubscriptionPriceUsd != null && author.connectChargesEnabled === true
 
   return (
 
@@ -126,31 +104,16 @@ export default function AuthorProfilePage() {
                 </p>
                 <div className="flex flex-col gap-3">
                   <FollowButton authorId={authorId!} className="w-full" />
-                  {hasSubscription && (
-                    alreadySubscribed ? (
-                      <Button variant="secondary" className="w-full justify-center" disabled>
-                        Already subscribed
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="primary"
-                        className="w-full justify-center"
-                        onClick={handleSubscribe}
-                        disabled={checkoutMutation.isPending}
-                      >
-                        {checkoutMutation.isPending ? '…' : `Subscribe · $${author.authorSubscriptionPriceUsd}/mo`}
-                      </Button>
-                    )
+                  {hasSubscription && author.authorSubscriptionPriceUsd != null && (
+                    <AuthorSubscribeCTA
+                      authorId={authorId!}
+                      authorDisplayName={author.displayName}
+                      priceUsd={author.authorSubscriptionPriceUsd}
+                      connectChargesEnabled={author.connectChargesEnabled}
+                      alreadySubscribed={alreadySubscribed}
+                    />
                   )}
                 </div>
-                {subError && (
-                  <p className="mt-3 text-[0.72rem] text-[#c0544a] text-center">{subError}</p>
-                )}
-                {hasSubscription && !alreadySubscribed && (
-                  <p className="mt-4 text-[0.72rem] font-light text-stone-light text-center leading-relaxed">
-                    Unlock private gallery + direct support
-                  </p>
-                )}
               </div>
             </div>
           </div>

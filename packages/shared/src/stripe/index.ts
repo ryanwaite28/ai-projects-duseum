@@ -138,6 +138,14 @@ export const createConnectPrice = async (
   return stripe.prices.create(params, { stripeAccount })
 }
 
+export const archiveConnectPrice = async (
+  priceId: string,
+  stripeAccount: string
+): Promise<void> => {
+  const stripe = await getStripeClient()
+  await stripe.prices.update(priceId, { active: false }, { stripeAccount })
+}
+
 // ── Refunds ───────────────────────────────────────────────────────────────────
 
 export const issueRefund = async (

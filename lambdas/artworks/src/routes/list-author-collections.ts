@@ -1,7 +1,7 @@
 // =============================================================================
 // lambdas/artworks/src/routes/list-author-collections.ts
 // GET /authors/{authorId}/collections — §8.5
-// Public (no auth required). Returns the author's PUBLIC collections only.
+// JWT optional. Owner sees all collections; others see FREE-only.
 // =============================================================================
 
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
@@ -14,7 +14,7 @@ import {
 
 export const listAuthorCollectionsRoute = async (
   event: APIGatewayProxyEventV2,
-  _context: DuseumContext,
+  context: DuseumContext,
   authorId: string
 ): Promise<APIGatewayProxyStructuredResultV2> => {
   const qs      = event.queryStringParameters ?? {}
@@ -23,8 +23,10 @@ export const listAuthorCollectionsRoute = async (
     ? JSON.parse(Buffer.from(qs['cursor'], 'base64url').toString()) as Record<string, unknown>
     : undefined
 
+  const isOwner = context.userId === authorId
+
   const result = await listCollectionsByAuthor(docClient, authorId, {
-    publicOnly: true,
+    visibilityFilter: isOwner ? undefined : 'FREE',
     limit,
     lastKey,
   })

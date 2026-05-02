@@ -43,7 +43,7 @@ export const connectOnboard = async (
   let connectAccountId = author.stripeConnectAccountId
 
   if (!connectAccountId) {
-    const account = await createConnectAccount({ type: 'express' })
+    const account = await createConnectAccount({ type: 'express', business_type: 'individual' })
     connectAccountId = account.id
 
     // Write Author record and reverse-lookup record in parallel.
@@ -71,10 +71,11 @@ export const connectOnboard = async (
   }
 
   const link = await createAccountLink({
-    account:     connectAccountId,
-    type:        'account_onboarding',
-    refresh_url: `${APP_BASE_URL}/dashboard/author?connect=refresh`,
-    return_url:  `${APP_BASE_URL}/dashboard/author?connect=return`,
+    account:            connectAccountId,
+    type:               'account_onboarding',
+    refresh_url:        `${APP_BASE_URL}/dashboard/author?connect=refresh`,
+    return_url:         `${APP_BASE_URL}/dashboard/author?connect=return`,
+    collection_options: { fields: 'currently_due' },
   })
 
   return ok({ accountLinkUrl: link.url })

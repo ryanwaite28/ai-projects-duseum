@@ -41,7 +41,27 @@ export const useDeleteReaction = (artworkId: string) => {
 
   return useMutation({
     mutationFn: () => socialService.deleteReaction(artworkId),
-    onSettled:  () => {
+
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: artworkQueryKey(artworkId) })
+      const prev = qc.getQueryData<Artwork>(artworkQueryKey(artworkId))
+
+      if (prev?.viewerReaction) {
+        const updated = { ...prev.reactionCounts }
+        const cur = updated[prev.viewerReaction] ?? 0
+        if (cur > 1) updated[prev.viewerReaction] = cur - 1
+        else delete updated[prev.viewerReaction]
+        qc.setQueryData<Artwork>(artworkQueryKey(artworkId), { ...prev, reactionCounts: updated, viewerReaction: null })
+      }
+
+      return { prev }
+    },
+
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(artworkQueryKey(artworkId), ctx.prev)
+    },
+
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: artworkQueryKey(artworkId) })
     },
   })

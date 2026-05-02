@@ -117,6 +117,7 @@ export class ApiStack extends cdk.Stack {
       CLOUDFRONT_KEY_PAIR_ID:   cloudfrontKeyPairId,
       COGNITO_USER_POOL_ID:     userPoolId,
       COGNITO_CLIENT_ID:        userPoolClientId,
+      APP_BASE_URL:             isProd ? 'https://duseum.com' : `https://${envName}.duseum.com`,
     }
 
     // ── Common DynamoDB main table CRUD policy ────────────────────────────────
@@ -304,6 +305,7 @@ export class ApiStack extends cdk.Stack {
     grantApiGwInvoke(artworksLambda, 'ArtworksApiGwInvoke')
     const artworksIntegration = makeIntegration('ArtworksIntegration', artworksLambda)
     route('RouteGetArtworks',       'GET /artworks',                  artworksIntegration, 'NONE')
+    route('RouteGetMyArtworks',     'GET /artworks/mine',             artworksIntegration, 'JWT')
     route('RouteGetArtwork',        'GET /artworks/{artworkId}',      artworksIntegration, 'NONE')
     route('RoutePostArtwork',       'POST /artworks',                 artworksIntegration, 'JWT')
     route('RoutePutArtwork',        'PUT /artworks/{artworkId}',      artworksIntegration, 'JWT')
@@ -438,7 +440,10 @@ export class ApiStack extends cdk.Stack {
           sid: 'WebhookSecret',
           effect: iam.Effect.ALLOW,
           actions: ['secretsmanager:GetSecretValue'],
-          resources: [secretArn(this, envName, `duseum/${envName}/stripe/webhook-secret`)],
+          resources: [
+            secretArn(this, envName, `duseum/${envName}/stripe/webhook-secret`),
+            secretArn(this, envName, `duseum/${envName}/stripe/webhook-secret-account`),
+          ],
         }),
         new iam.PolicyStatement({
           sid: 'WebhookStripeKey',
@@ -516,6 +521,7 @@ export class ApiStack extends cdk.Stack {
     })
     grantApiGwInvoke(featuresLambda, 'FeaturesApiGwInvoke')
     const featuresIntegration = makeIntegration('FeaturesIntegration', featuresLambda)
+    route('RouteGetFeaturesHomepage',      'GET /features/homepage',           featuresIntegration, 'NONE')
     route('RouteGetFeaturesDaily',        'GET /features/daily',              featuresIntegration, 'NONE')
     route('RouteGetFeaturesWeekly',       'GET /features/weekly',             featuresIntegration, 'NONE')
     route('RouteGetFeaturesAvailability', 'GET /features/weekly/availability',featuresIntegration, 'NONE')
@@ -536,17 +542,18 @@ export class ApiStack extends cdk.Stack {
     })
     grantApiGwInvoke(socialLambda, 'SocialApiGwInvoke')
     const socialIntegration = makeIntegration('SocialIntegration', socialLambda)
-    route('RouteGetComments',          'GET /artworks/{artworkId}/comments',  socialIntegration, 'NONE')
-    route('RoutePostComment',          'POST /artworks/{artworkId}/comments', socialIntegration, 'JWT')
-    route('RouteDeleteComment',        'DELETE /comments/{commentId}',         socialIntegration, 'JWT')
+    route('RouteGetComments',          'GET /artworks/{artworkId}/comments',                       socialIntegration, 'NONE')
+    route('RoutePostComment',          'POST /artworks/{artworkId}/comments',                      socialIntegration, 'JWT')
+    route('RouteDeleteComment',        'DELETE /comments/{commentId}',                              socialIntegration, 'JWT')
+    route('RoutePinComment',           'PUT /artworks/{artworkId}/comments/{commentId}/pin',        socialIntegration, 'JWT')
     route('RoutePutReaction',          'PUT /artworks/{artworkId}/reactions',  socialIntegration, 'JWT')
     route('RouteDeleteReaction',       'DELETE /artworks/{artworkId}/reactions',socialIntegration, 'JWT')
-    route('RoutePostFollow',           'POST /follows/authors/{authorId}',     socialIntegration, 'JWT')
-    route('RouteDeleteFollow',         'DELETE /follows/authors/{authorId}',   socialIntegration, 'JWT')
-    route('RouteGetFollows',           'GET /follows/authors',                 socialIntegration, 'JWT')
-    route('RouteGetNotifPrefs',        'GET /users/me/notification-preferences', socialIntegration, 'JWT')
-    route('RoutePutNotifPrefs',        'PUT /users/me/notification-preferences', socialIntegration, 'JWT')
-    route('RouteGetUnsubscribe',       'GET /notifications/unsubscribe',       socialIntegration, 'NONE')
+    route('RoutePostFollow',           'POST /follows/authors/{authorId}',     usersIntegration,  'JWT')
+    route('RouteDeleteFollow',         'DELETE /follows/authors/{authorId}',   usersIntegration,  'JWT')
+    route('RouteGetFollows',           'GET /follows/authors',                 usersIntegration,  'JWT')
+    route('RouteGetNotifPrefs',        'GET /users/me/notification-preferences', usersIntegration,  'JWT')
+    route('RoutePutNotifPrefs',        'PUT /users/me/notification-preferences', usersIntegration,  'JWT')
+    route('RouteGetUnsubscribe',       'GET /notifications/unsubscribe',         usersIntegration,  'NONE')
     stage.node.addDependency(socialIntegration)
 
     // =========================================================================
@@ -601,7 +608,11 @@ export class ApiStack extends cdk.Stack {
       envName,
       description: `[${envName}] maintenance-lambda — daily feature selection + weekly rotation`,
       timeout: cdk.Duration.seconds(300), // up to 5 min for maintenance tasks
-      environment: { ...commonEnv },
+      environment: {
+        ...commonEnv,
+        DAILY_FEATURE_RULE_NAME:   `duseum-${envName}-eventbridge-daily-featured-author`,
+        WEEKLY_ROTATION_RULE_NAME: `duseum-${envName}-eventbridge-weekly-feature-rotation`,
+      },
       initialPolicy: [
         mainTableCrudPolicy,
         new iam.PolicyStatement({

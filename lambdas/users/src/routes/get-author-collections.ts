@@ -18,14 +18,14 @@ export const getAuthorCollections = async (
   const author = await getAuthorProfile(docClient, authorId)
   if (!author || author.status !== 'ACTIVE') throw new NotFoundError('Author not found')
 
-  const result = await listCollectionsByAuthor(docClient, authorId, { publicOnly: true })
+  const result = await listCollectionsByAuthor(docClient, authorId, { visibilityFilter: 'FREE' })
 
   return ok({
     items: result.items.map((c) => ({
       collectionId: c.collectionId,
       title:        c.title,
       description:  c.description,
-      isPublic:     c.isPublic,
+      visibility:   c.visibility,
       createdAt:    c.createdAt,
       updatedAt:    c.updatedAt,
     })),

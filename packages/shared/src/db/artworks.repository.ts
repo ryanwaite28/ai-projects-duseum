@@ -443,6 +443,52 @@ export const incrementAuthorPieceCount = async (
   )
 }
 
+export type ListOwnArtPiecesInput = {
+  authorId: string
+  visibilityFilter?: 'PUBLIC' | 'PRIVATE' | 'DRAFT'
+  limit?: number
+  lastKey?: Record<string, unknown>
+}
+
+/**
+ * Returns all art pieces owned by an Author (PUBLIC, PRIVATE, DRAFT) sorted newest-first.
+ * Uses GSI-AuthorPublic without a visibility SK prefix so all statuses are returned.
+ * An optional `visibilityFilter` narrows to a single visibility value.
+ */
+export const listOwnArtPieces = async (
+  client: DynamoDBDocumentClient,
+  { authorId, visibilityFilter, limit = 20, lastKey }: ListOwnArtPiecesInput
+): Promise<{ items: ArtPiece[]; lastKey?: Record<string, unknown> }> => {
+  const filterParts: string[] = ['#status <> :archived']
+  const filterNames: Record<string, string> = { '#status': 'status' }
+  const filterValues: Record<string, unknown> = { ':archived': 'ARCHIVED' }
+
+  if (visibilityFilter) {
+    filterParts.push('#vis = :vis')
+    filterNames['#vis'] = 'visibility'
+    filterValues[':vis'] = visibilityFilter
+  }
+
+  const result = await client.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      IndexName: 'GSI-AuthorPublic',
+      KeyConditionExpression: 'authorId = :authorId',
+      FilterExpression: filterParts.join(' AND '),
+      ExpressionAttributeNames: filterNames,
+      ExpressionAttributeValues: { ':authorId': authorId, ...filterValues },
+      ScanIndexForward: false,
+      Limit: limit,
+      ExclusiveStartKey: lastKey,
+    })
+  )
+
+  return {
+    items: (result.Items ?? []) as ArtPiece[],
+    lastKey: result.LastEvaluatedKey as Record<string, unknown> | undefined,
+  }
+}
+
 /**
  * Returns the Platform Subscription for a user, or null if not subscribed.
  */

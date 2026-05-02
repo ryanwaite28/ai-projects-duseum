@@ -52,6 +52,7 @@ export interface Artwork {
   visibility:         ArtworkVisibility
   viewCount:          number
   reactionCounts:     Partial<Record<ReactionType, number>>
+  viewerReaction:     ReactionType | null
   commentCount:       number
   commentsEnabled:    boolean
   publishedAt:        string | null
@@ -109,6 +110,7 @@ export interface AuthorProfile {
   followerCount:                number
   subscriberCount:              number
   authorSubscriptionPriceUsd:   number | null
+  connectChargesEnabled:        boolean | null
   recentPieces:                 ArtworkListItem[]
   status:                       'ACTIVE' | 'SUSPENDED'
 }

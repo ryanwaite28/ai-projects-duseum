@@ -37,9 +37,9 @@ export const getCollectionRoute = async (
   const userId: string | undefined = context.userId
   const isOwner = !!userId && collection.ownerId === userId
 
-  // PRIVATE collection gate — FR-COL-03
-  if (!collection.isPublic && !isOwner) {
-    if (!userId) throw new ForbiddenError('Authentication required for private collections')
+  // SUBSCRIBER_ONLY collection gate — FR-COL-03
+  if (collection.visibility === 'SUBSCRIBER_ONLY' && !isOwner) {
+    if (!userId) throw new ForbiddenError('Authentication required to view subscriber-only collections')
     const authorSub = await getAuthorSubscription(docClient, userId, collection.ownerId)
     if (authorSub?.status !== 'ACTIVE') {
       throw new ForbiddenError('An active Author subscription is required to view this collection')

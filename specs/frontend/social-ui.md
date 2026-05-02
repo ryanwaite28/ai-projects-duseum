@@ -1,6 +1,6 @@
 ## Spec: Social Interactions UI (Comments & Reactions)
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-SOC-01, FR-SOC-02, FR-SOC-03, FR-SOC-04, FR-SOC-05, FR-VIEW-07
 **Relevant PROJECT.md sections**: 2.9, 6.8
 
@@ -9,13 +9,13 @@
 **Prerequisites**: Comments and reactions API endpoints complete (`social/comments.md`, `social/reactions.md`); Artwork detail page exists; React Query configured; `social.service.ts` implemented
 
 **Done when**:
-- [ ] `ReactionBar` shows 4 reaction types with counts; authenticated viewer's current reaction highlighted
-- [ ] Clicking same reaction deletes it; clicking different reaction replaces it; optimistic update reverts on API error
-- [ ] Comment thread shows pinned comments first with visual pin indicator (gold left-border)
-- [ ] Reply form appears only one level deep — no reply-to-reply UI
-- [ ] Comment form shows disabled notice when `commentsEnabled=false` on piece
-- [ ] Author-of-piece sees pin (max 2) and delete actions on all comments
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] `ReactionBar` shows 4 reaction types with counts; authenticated viewer's current reaction highlighted
+- [x] Clicking same reaction deletes it; clicking different reaction replaces it; optimistic update reverts on API error
+- [x] Comment thread shows pinned comments first with visual pin indicator (gold left-border)
+- [x] Reply form appears only one level deep — no reply-to-reply UI
+- [x] Comment form shows disabled notice when `commentsEnabled=false` on piece
+- [x] Author-of-piece sees pin (max 2) and delete actions on all comments
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `frontend/src/components/social/ReactionBar.tsx` — 4 reaction buttons with counts; toggle behavior

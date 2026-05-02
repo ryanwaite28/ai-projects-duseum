@@ -41,3 +41,13 @@ export const useAllComments = (artworkId: string): ArtworkComment[] => {
   const { data } = useComments(artworkId)
   return data?.pages.flatMap((p) => p.items) ?? []
 }
+
+export const usePinComment = (artworkId: string) => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (commentId: string) => socialService.pinComment(artworkId, commentId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: commentsQueryKey(artworkId) })
+    },
+  })
+}

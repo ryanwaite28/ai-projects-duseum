@@ -349,13 +349,13 @@ describe('DELETE /artworks/{artworkId}/reactions', () => {
     expect(meta.Item?.reactionCounts?.INSPIRED ?? 0).toBe(0)
   })
 
-  it('returns 404 when the user has no reaction to delete', async () => {
+  it('returns 204 no-op when the user has no reaction to delete', async () => {
     await seedArtwork(ARTWORK_ID, ARTWORK_AUTHOR)
 
     const res = await callHandler(makeEvent(
       'DELETE', `/artworks/${ARTWORK_ID}/reactions`,
       { userId: VIEWER_A, pathParameters: { artworkId: ARTWORK_ID } }
     ))
-    expect(res.statusCode).toBe(404)
+    expect(res.statusCode).toBe(204)
   })
 })

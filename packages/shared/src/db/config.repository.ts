@@ -153,6 +153,48 @@ export const getWeeklyFeatureConfig = async (
   return { feeUsd, slotCount, advanceWeeks }
 }
 
+export type PlatformConfig = {
+  freeTierLimit:           number
+  platformSubPriceId:      string
+  platformCutPercent:      number
+  weeklyFeatureFeeUsd:     number
+  weeklyFeatureSlotCount:  number
+  weeklyFeatureAdvanceWeeks: number
+}
+
+/**
+ * Reads all platform config values in parallel.
+ * Used by admin-lambda GET /admin/config (FR-ADMIN-05).
+ */
+export const getPlatformConfig = async (
+  client: DynamoDBDocumentClient
+): Promise<PlatformConfig> => {
+  const [
+    freeTierLimit,
+    platformSubPriceIdRaw,
+    platformCutPercent,
+    weeklyFeatureFeeUsd,
+    weeklyFeatureSlotCount,
+    weeklyFeatureAdvanceWeeks,
+  ] = await Promise.all([
+    getConfigNumber(client, 'FREE_TIER_LIMIT', 10),
+    client.send(new GetCommand({ TableName: CONFIG_TABLE_NAME, Key: { PK: 'PLATFORM_SUB_PRICE_ID' } })),
+    getConfigNumber(client, 'PLATFORM_CUT_PERCENT', 20),
+    getConfigNumber(client, 'WEEKLY_FEATURE_FEE_USD', 25),
+    getConfigNumber(client, 'WEEKLY_FEATURE_SLOT_COUNT', 10),
+    getConfigNumber(client, 'WEEKLY_FEATURE_ADVANCE_WEEKS', 8),
+  ])
+
+  return {
+    freeTierLimit,
+    platformSubPriceId:      (platformSubPriceIdRaw.Item?.value as string | undefined) ?? '',
+    platformCutPercent,
+    weeklyFeatureFeeUsd,
+    weeklyFeatureSlotCount,
+    weeklyFeatureAdvanceWeeks,
+  }
+}
+
 /**
  * Writes (or overwrites) a single config table entry with { PK: key, value }.
  * Used by admin-lambda PUT /admin/config to update platform settings (FR-ADMIN-05).

@@ -1,6 +1,6 @@
 ## Spec: Author Dashboard UI
 
-**Status**: ⬜ Pending
+**Status**: ✅ Implemented
 **FR coverage**: FR-AUTH-PROF-06, FR-AUTH-PROF-08, FR-AUTH-PROF-09, FR-FEAT-18, FR-NOTIF-12
 **Relevant PROJECT.md sections**: 2.4, 6.8
 
@@ -11,13 +11,13 @@
 **Done when**:
 - [x] Stats section renders `totalViews`, `followerCount`, `subscriberCount`, `MRR` from API
 - [x] Connect status card visible in Author dashboard with correct onboarding state
-- [ ] Upload flow completes all 4 steps (intent → S3 PUT → confirm → publish) with progress indicator
-- [ ] Artworks tab shows `notificationsSent` count per published piece
-- [ ] Pinned pieces drag-and-drop enforces max 3 before allowing reorder
-- [ ] Collections tab creates, lists, and manages pieces within collections
-- [ ] Bookings tab shows upcoming + past bookings with correct status badges
+- [x] Upload flow completes all 4 steps (intent → S3 PUT → confirm → publish) with progress indicator
+- [x] Artworks tab shows `notificationsSent` count per published piece
+- [x] Pinned pieces drag-and-drop enforces max 3 before allowing reorder
+- [x] Collections tab creates, lists, and manages pieces within collections
+- [x] Bookings tab shows upcoming + past bookings with correct status badges
 - [x] Subscribers tab shows paginated subscriber list with status badges + count stat (see `subscriptions/my-subscribers.md`)
-- [ ] Spec `**Status**` updated to ✅ Implemented
+- [x] Spec `**Status**` updated to ✅ Implemented
 
 **New/modified files**:
 - `frontend/src/pages/dashboard/author.tsx` — main Author dashboard

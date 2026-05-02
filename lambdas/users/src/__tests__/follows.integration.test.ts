@@ -156,12 +156,12 @@ describe('DELETE /follows/authors/{authorId}', () => {
     expect(authorItem.Item?.followerCount).toBe(0)
   })
 
-  it('returns 404 when not following the author', async () => {
+  it('returns 200 (no-op) when not following the author', async () => {
     await Promise.all([seedViewer(VIEWER), seedAuthor(AUTHOR_A)])
 
     const res = await callHandler(makeEvent('DELETE', `/follows/authors/${AUTHOR_A}`,
       { userId: VIEWER, pathParameters: { authorId: AUTHOR_A } }))
-    expect(res.statusCode).toBe(404)
+    expect(res.statusCode).toBe(200)
   })
 })
 
