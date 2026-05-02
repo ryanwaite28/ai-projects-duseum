@@ -43,8 +43,20 @@ export const runWeeklyRotation = async (): Promise<void> => {
     )
   )
 
+  // ── Safety net: archive any CONFIRMED bookings that missed last week's rotation
+  // (e.g. payment confirmed after Monday 00:00 UTC for a past week)
+  const toArchiveConfirmed = await listBookingsByStatusAndWeek(docClient, 'CONFIRMED', previousWeek)
+  logger.info('Stale CONFIRMED previous-week bookings to archive', { count: toArchiveConfirmed.length, isoWeek: previousWeek })
+
+  await Promise.all(
+    toArchiveConfirmed.map((b) =>
+      updateBookingStatus(docClient, b.isoWeek, b.authorId, 'ARCHIVED')
+    )
+  )
+
   logger.info('Weekly rotation complete', {
-    activated: toActivate.length,
-    archived:  toArchive.length,
+    activated:       toActivate.length,
+    archived:        toArchive.length,
+    archivedStale:   toArchiveConfirmed.length,
   })
 }

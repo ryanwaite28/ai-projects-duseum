@@ -9,7 +9,7 @@
 // =============================================================================
 
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
-import { updateBookingStatus } from '@duseum/shared'
+import { shouldActivateImmediately, updateBookingStatus } from '@duseum/shared'
 import { logger } from './logger.js'
 
 type StripePaymentIntent = {
@@ -47,8 +47,15 @@ export const handlePaymentIntentSucceeded = async (
   const booking = resolveBooking(pi)
   if (!booking) return
 
-  await updateBookingStatus(client, booking.isoWeek, booking.authorId, 'CONFIRMED')
-  logger.info('WeeklyFeatureBooking confirmed', booking)
+  if (shouldActivateImmediately(booking.isoWeek)) {
+    await updateBookingStatus(client, booking.isoWeek, booking.authorId, 'ACTIVE', {
+      activatedAt: new Date().toISOString(),
+    })
+    logger.info('WeeklyFeatureBooking immediately activated', booking)
+  } else {
+    await updateBookingStatus(client, booking.isoWeek, booking.authorId, 'CONFIRMED')
+    logger.info('WeeklyFeatureBooking confirmed (awaits Monday rotation)', booking)
+  }
 }
 
 export const handlePaymentIntentFailed = async (

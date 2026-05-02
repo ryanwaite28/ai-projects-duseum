@@ -10,7 +10,12 @@ import {
   addWeeks,
   isWithinThreeMonthWindow,
   getEligibleWeeks,
+  shouldActivateImmediately,
 } from './index.js'
+
+// Deterministic reference dates for time-sensitive tests
+const MONDAY = new Date('2025-08-04') // 2025-W32, getUTCDay() === 1
+const SUNDAY = new Date('2025-08-10') // 2025-W32, getUTCDay() === 0
 
 // ── getIsoWeekForDate ─────────────────────────────────────────────────────────
 
@@ -122,36 +127,68 @@ describe('isWithinThreeMonthWindow', () => {
 
 describe('getEligibleWeeks', () => {
   it('returns advanceWeeks + 1 entries (current week + N future weeks)', () => {
-    expect(getEligibleWeeks(8)).toHaveLength(9)
+    expect(getEligibleWeeks(8, MONDAY)).toHaveLength(9)
   })
 
-  it('first entry is the current week', () => {
-    const current = getCurrentIsoWeek()
-    const eligible = getEligibleWeeks(8)
-    expect(eligible[0]).toBe(current)
+  it('first entry is the current week on a non-Sunday', () => {
+    expect(getEligibleWeeks(8, MONDAY)[0]).toBe('2025-W32')
   })
 
   it('last entry is current + advanceWeeks', () => {
-    const current = getCurrentIsoWeek()
-    const eligible = getEligibleWeeks(8)
-    expect(eligible[8]).toBe(addWeeks(current, 8))
+    const eligible = getEligibleWeeks(8, MONDAY)
+    expect(eligible[8]).toBe(addWeeks('2025-W32', 8))
   })
 
   it('all entries are in YYYY-Www format', () => {
-    getEligibleWeeks(4).forEach(w => {
+    getEligibleWeeks(4, MONDAY).forEach(w => {
       expect(w).toMatch(/^\d{4}-W\d{2}$/)
     })
   })
 
   it('returns single entry (current week) when advanceWeeks is 0', () => {
-    const current = getCurrentIsoWeek()
-    expect(getEligibleWeeks(0)).toEqual([current])
+    expect(getEligibleWeeks(0, MONDAY)).toEqual(['2025-W32'])
   })
 
   it('weeks are sequential (each is one week apart)', () => {
-    const weeks = getEligibleWeeks(5)
+    const weeks = getEligibleWeeks(5, MONDAY)
     for (let i = 1; i < weeks.length; i++) {
       expect(weeks[i]).toBe(addWeeks(weeks[i - 1]!, 1))
     }
+  })
+
+  it('on Sunday: skips the current week, first entry is next week', () => {
+    // SUNDAY = 2025-08-10, which is still in 2025-W32 (getUTCDay() === 0)
+    const eligible = getEligibleWeeks(3, SUNDAY)
+    expect(eligible[0]).toBe('2025-W33')
+  })
+
+  it('on Sunday with advanceWeeks=3: returns exactly 3 entries', () => {
+    expect(getEligibleWeeks(3, SUNDAY)).toHaveLength(3)
+  })
+
+  it('on Sunday with advanceWeeks=0: returns empty array (current week blocked)', () => {
+    expect(getEligibleWeeks(0, SUNDAY)).toHaveLength(0)
+  })
+})
+
+// ── shouldActivateImmediately ─────────────────────────────────────────────────
+
+describe('shouldActivateImmediately', () => {
+  it('returns true when booking is for the current ISO week', () => {
+    expect(shouldActivateImmediately('2025-W32', MONDAY)).toBe(true)
+  })
+
+  it('returns false when booking is for a future week', () => {
+    expect(shouldActivateImmediately('2025-W33', MONDAY)).toBe(false)
+  })
+
+  it('returns false when booking is for a past week', () => {
+    expect(shouldActivateImmediately('2025-W31', MONDAY)).toBe(false)
+  })
+
+  it('returns true on a Sunday for the same ISO week (booking made earlier in the week)', () => {
+    // SUNDAY (2025-08-10) is still in 2025-W32 — a booking placed Mon–Sat for W32
+    // should still activate immediately when payment confirms on Sunday
+    expect(shouldActivateImmediately('2025-W32', SUNDAY)).toBe(true)
   })
 })

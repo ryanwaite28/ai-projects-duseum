@@ -99,6 +99,8 @@
 - `lambdas/features/src/__tests__/weekly-and-bookings.integration.test.ts` — `GET /features/weekly`, `GET /features/weekly/my-bookings`
 - `lambdas/subscriptions/src/__tests__/subscriptions.integration.test.ts` — extended with `GET /subscriptions/me/subscribers`
 - `lambdas/subscriptions/src/__tests__/setup.ts` — added `GSI-SubscribersByAuthor` to table definition
+- `lambdas/subscriptions-webhook/src/__tests__/stripe-webhook.integration.test.ts` — extended: current-week `payment_intent.succeeded` → immediately ACTIVE; past-week → CONFIRMED; test description clarified
+- `lambdas/maintenance/src/__tests__/weekly-rotation.integration.test.ts` — extended: safety-net test for CONFIRMED previous-week → ARCHIVED
 
 ### Frontend service unit tests
 - `frontend/src/services/__tests__/artworks.service.test.ts`
@@ -120,13 +122,19 @@
 - `frontend/src/test/test-utils.tsx` — shared render wrapper (QueryClientProvider + MemoryRouter)
 - `frontend/src/test/setup.ts` — updated: patches `window.location` to silence jsdom navigation warnings
 
+### Shared package unit tests
+- `packages/shared/src/features/iso-week.test.ts` — extended: `getEligibleWeeks` tests use deterministic `MONDAY`/`SUNDAY` fixtures; Sunday blocking tests added; `shouldActivateImmediately` test suite added
+
 ### Zustand store regression tests
 - `frontend/src/store/__tests__/auth.store.test.ts` — FR-TESTING-06: `signOut()` clears React Query cache
 
 ### Project docs
 - `PROJECT.md` — FR-TESTING-05 broadened; Section 15.5 expanded with component test pattern
+- `PROJECT.md` — FR-FEAT-08/10/12/14/15/17 updated; slot count default corrected to 3; immediate-ACTIVE lifecycle; Sunday booking block; safety-net rotation step; GSI deduplication
 - `CLAUDE.md` — component tests added as distinct testing layer with pattern guidance
-- `specs/testing/test-coverage.md` — component coverage table added
+- `specs/features/weekly-booking.md` — business logic updated for immediate-ACTIVE, Sunday block, GSI dedup, slotsTotal from API
+- `specs/features/maintenance-rotation.md` — three-step rotation described; safety-net done-when item added
+- `specs/testing/test-coverage.md` — new test coverage entries added
 
 ---
 
