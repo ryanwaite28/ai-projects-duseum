@@ -11,7 +11,7 @@
 **Done when**:
 - [x] `WeeklyFeaturedCarousel` array shuffled client-side on every mount — order not fixed across renders
 - [x] `DailyFeaturedSpotlight` renders cover photo, bio excerpt, and pinned pieces from API
-- [x] Booking calendar disables fully-booked weeks and current ISO week
+- [x] Booking calendar disables fully-booked weeks only; current ISO week is selectable if slots remain (FR-FEAT-14)
 - [x] "Book this week" CTA calls `POST /features/weekly/book` → receives `paymentIntentClientSecret`
 - [x] Stripe.js `confirmPayment()` called with client secret; on success → confirmation shown + history updated
 - [x] Booking page visible to active Authors only (auth guard redirects non-Authors)
