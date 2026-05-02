@@ -264,11 +264,23 @@ Notable implementations in this phase:
 
 ## Cross-Cutting Lessons
 
-### 1. The spec gate prevents scope creep and regressions
+### 1. The spec gate applies to everything — including test fixes and CI failures
 
 Without the "Approved — proceed." gate, AI will interpret ambiguous approval ("sounds good", "okay", "yes") as license to implement. Requiring a specific exact phrase creates a hard checkpoint that forces the human to read the spec before implementation begins.
 
 **The spec gate also prevents the AI from implementing more than requested.** Because the spec lists exactly which files are in scope, the AI can't silently add "helpful" changes to files not on the list.
+
+**The most dangerous case is a failing test.** When CI reports a test failure, the immediate AI instinct is to make the error go away — usually by fixing the implementation to satisfy the test. But the test may be wrong. The correct sequence is:
+
+1. Read PROJECT.md for the relevant FR
+2. Read the spec for the expected behavior
+3. Present which side is wrong (implementation or test) with citations
+4. Wait for "Approved — proceed."
+5. Fix only the wrong side
+
+This was learned directly: a `DELETE /follows/authors/{authorId}` test expected a 404 when the follow record didn't exist. The AI fixed the implementation to throw `NotFoundError` — but the spec explicitly stated "no-op if record doesn't exist → 200." The implementation was correct; the test was wrong. The fix was caught only because the human asked "does that change align with PROJECT.md?" — a question that should have been answered *before* any file was touched.
+
+**Encode this as a rule:** skipping the spec step for a CI failure is exactly the scenario where it matters most. A wrong test silently passes after the fix, locking in incorrect behavior permanently.
 
 ### 2. CLAUDE.md is institutional memory for AI sessions
 
@@ -384,6 +396,8 @@ Based on this project, the recommended sequence for a future production-grade AI
 4. **Run `tsc --noEmit` against the frontend on every Lambda spec.** Several frontend type-drift issues (`viewerReaction`, `connectChargesEnabled`) would have been caught earlier if the full monorepo typecheck ran after each backend spec, not just the Lambda-side typecheck.
 
 5. **One PR per spec.** The 13-PRs-in-one-day pattern made git history hard to read. One spec = one branch = one PR keeps history auditable.
+
+6. **Require the spec step even for test failures.** A CI failure is not a shortcut around the process — it is the scenario where the process matters most. The correct side to fix (implementation vs. test) cannot be determined without first reading PROJECT.md and the spec. Encode this explicitly in CLAUDE.md from the start, not as an afterthought.
 
 ---
 
