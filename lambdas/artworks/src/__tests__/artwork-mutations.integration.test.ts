@@ -312,7 +312,7 @@ describe('GET /artworks/mine', () => {
     await seedS3Object('mine-vis-pub')
     await seedS3Object('mine-vis-priv')
 
-    const event = makeEvent('GET', '/artworks/mine?visibility=PRIVATE', {
+    const event = makeEvent('GET', '/artworks/mine', {
       userId: AUTHOR_ID,
       queryStringParameters: { visibility: 'PRIVATE' },
     })
