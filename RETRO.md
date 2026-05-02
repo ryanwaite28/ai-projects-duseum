@@ -468,6 +468,54 @@ Three approaches were evaluated via the `/devops` skill:
 
 ---
 
+## Phase 10 — Frontend Sign-Out Bug: React Query Cache Not Cleared (May 2)
+
+### What happened
+
+After signing out and signing into a different account on the same browser session, the new account appeared to display the previous account's data — profile name, dashboard content, subscriptions. The stale data disappeared only after signing out, refreshing the page, and then signing in. A page refresh was required to get a clean state.
+
+### Root cause
+
+`signOut()` in `auth.store.ts` correctly called `amplifySignOut()` and set `user: null` in Zustand, but it did not call `queryClient.clear()`. React Query's in-memory cache retained all API responses from the previous user's session. When a new user signed in, Zustand immediately had the correct new user identity (and `getAccessToken()` returned the new user's Cognito token), but React Query served the previous user's cached responses for any query that had not yet gone stale.
+
+With `staleTime: 60_000`, the previous user's profile, artwork list, subscription status, and other data could be served for up to 60 seconds after the new user signed in. A page refresh destroyed all in-memory state — including the React Query cache — which is why the refresh workaround worked.
+
+### Why this was non-obvious
+
+React Query's cache is entirely separate from Zustand. Clearing Zustand auth state does not affect the React Query cache. The two systems share no signal. After sign-out, `getAccessToken()` returns the new user's token, so new API requests go to the right user — but React Query's stale-while-revalidate behaviour means the new user sees the cached response first, then the fresh response after revalidation. If the new user has a different profile than the previous user, the initial render shows wrong data.
+
+### The fix
+
+`queryClient` was moved from an inline declaration in `App.tsx` to an exported singleton in `frontend/src/lib/query-client.ts`. This allows `auth.store.ts` to import it without a circular dependency. Both branches of `signOut()` (Cognito path and local-stub path) now call `queryClient.clear()` before nulling the Zustand user state.
+
+```typescript
+// auth.store.ts — signOut(), Cognito path
+try {
+  await amplifySignOut()
+} finally {
+  queryClient.clear()  // ← added
+  set({ user: null, isLoading: false, error: null })
+}
+```
+
+### Rule added to CLAUDE.md
+
+Added to the "Common Mistakes — Frontend / Design System" section: don't clear Zustand auth state without also calling `queryClient.clear()`. The `queryClient` singleton must live in `frontend/src/lib/query-client.ts` so the store can import it.
+
+### Regression test added
+
+`frontend/src/store/__tests__/auth.store.test.ts` — asserts `queryClient.clear()` is called once when `signOut()` resolves (FR-TESTING-06). Uses `vi.hoisted()` to initialize the mock before Vitest's `vi.mock()` factory hoisting runs. Stubs `localStorage` via `vi.stubGlobal` because the local-auth path calls `localStorage.removeItem()` when `VITE_AUTH_STUB=true` (loaded from `.env.local` in the test environment).
+
+### Lessons learned
+
+**Cross-cutting state managers don't know about each other.** Clearing one store (Zustand) does not clear another (React Query). Any sign-out flow that uses React Query must explicitly call `queryClient.clear()` — it does not happen automatically.
+
+**The `queryClient` singleton placement matters.** Declaring it inline inside a component module (`App.tsx`) makes it inaccessible to stores and services that need to call cache management methods. Place it in a dedicated utility module from the start.
+
+**The refresh workaround is a diagnostic signal, not a fix.** Whenever "refresh fixes it" is the workaround, the underlying cause is almost always stale in-memory state that is not tied to a browser storage mechanism (localStorage, sessionStorage, cookies). Those persist across soft refreshes; in-memory state does not.
+
+---
+
 ## Cross-Cutting Lessons
 
 ### 1. The spec gate applies to everything — including test fixes and CI failures

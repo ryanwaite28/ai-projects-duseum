@@ -224,6 +224,7 @@ All IAM resources tagged: `Project=duseum`, `Environment={env}`, `ManagedBy=CDK`
 - Don't apply `font-display` (Playfair italic) to body copy or UI labels — italic is for hero subtitles and gold emphasis words only
 - Don't forget `EyebrowLabel` above every major section heading — it's a required layout element
 - Don't skip the section alternation pattern (`bg-ink` / `bg-ink-soft` + `border-t border-gold/10`) — every page uses this rhythm
+- **Don't clear Zustand auth state in `signOut()` without also calling `queryClient.clear()`** — React Query's in-memory cache retains the previous user's data and will serve it to the next user who signs in on the same browser session. The `queryClient` singleton must live in `frontend/src/lib/query-client.ts` (not inline in `App.tsx`) so the store can import it. Both the Cognito and local-stub branches of `signOut()` must call `queryClient.clear()`.
 
 **Lambda / Application:**
 - Don't add routes to the wrong Lambda (check Section 4.2 — features routes belong in `features-lambda`, not `admin-lambda`)

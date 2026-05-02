@@ -84,6 +84,12 @@
 | ProtectedRoute | ProtectedRoute.test.tsx | loading spinner, unauth redirect, children rendered | ✅ |
 | AdminRoute | AdminRoute.test.tsx | auth loading, me loading, unauth redirect, non-ADMIN→403, ADMIN renders children | ✅ |
 
+### Zustand Store Regression Tests
+
+| Store | Test file | What is covered | Status |
+|---|---|---|---|
+| auth.store.ts | auth.store.test.ts | `signOut()` calls `queryClient.clear()` before nulling user (FR-TESTING-06) | ✅ |
+
 ---
 
 ## New/modified files
@@ -114,6 +120,9 @@
 - `frontend/src/test/test-utils.tsx` — shared render wrapper (QueryClientProvider + MemoryRouter)
 - `frontend/src/test/setup.ts` — updated: patches `window.location` to silence jsdom navigation warnings
 
+### Zustand store regression tests
+- `frontend/src/store/__tests__/auth.store.test.ts` — FR-TESTING-06: `signOut()` clears React Query cache
+
 ### Project docs
 - `PROJECT.md` — FR-TESTING-05 broadened; Section 15.5 expanded with component test pattern
 - `CLAUDE.md` — component tests added as distinct testing layer with pattern guidance
@@ -128,5 +137,6 @@
 - [x] FR-TESTING-03: every frontend service file has a unit test
 - [x] FR-TESTING-05: every significant component has a test file covering all rendering branches
 - [x] FR-TESTING-06: regression test for `followerCount.toLocaleString()` crash in `authors.service.test.ts`
+- [x] FR-TESTING-06: regression test for sign-out React Query cache not cleared in `auth.store.test.ts`
 - [x] FR-TESTING-07: idempotency test exists in `stripe-webhook.integration.test.ts`
 - [x] `specs/testing/test-coverage.md` gap table fully green
