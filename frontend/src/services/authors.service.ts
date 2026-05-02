@@ -1,8 +1,40 @@
 import { api } from './api'
-import type { AuthorProfile, AuthorCollection } from '../types/artwork'
+import type { AuthorProfile, ArtworkListItem, AuthorCollection } from '../types/artwork'
+
+type GetAuthorApiResponse = {
+  profile: {
+    authorId:                     string
+    displayName:                  string
+    bio:                          string
+    profilePhotoUrl:              string | null
+    coverPhotoUrl:                string | null
+    followerCount:                number
+    subscriberCount:              number
+    totalPiecesCount:             number
+    authorSubscriptionMonthlyUsd: number | null
+    connectChargesEnabled:        boolean | null
+    createdAt:                    string
+  }
+  gallery: {
+    items:      ArtworkListItem[]
+    nextCursor: string | null
+  }
+}
 
 export const getAuthor = (authorId: string): Promise<AuthorProfile> =>
-  api.get<AuthorProfile>(`/authors/${authorId}`)
+  api.get<GetAuthorApiResponse>(`/authors/${authorId}`).then(({ profile, gallery }) => ({
+    userId:                     profile.authorId,
+    displayName:                profile.displayName,
+    bio:                        profile.bio,
+    coverPhotoUrl:              profile.coverPhotoUrl,
+    avatarUrl:                  profile.profilePhotoUrl,
+    followerCount:              profile.followerCount,
+    subscriberCount:            profile.subscriberCount,
+    authorSubscriptionPriceUsd: profile.authorSubscriptionMonthlyUsd,
+    connectChargesEnabled:      profile.connectChargesEnabled,
+    recentPieces:               gallery.items,
+    status:                     'ACTIVE' as const,
+  }))
 
 export const listAuthors = (opts?: {
   sort?:   'subscriberCount' | 'newest'
