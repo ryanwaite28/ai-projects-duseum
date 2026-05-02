@@ -10,7 +10,7 @@
 // =============================================================================
 
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
-import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { BatchGetCommand, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
 import type { AuthorProfile, NotificationPref, UserAccount, ViewerProfile } from '../types/index.js'
 import { TABLE_NAME } from './client.js'
@@ -293,4 +293,37 @@ export const updateProfileStatus = async (
       ExpressionAttributeValues: { ':status': status, ':updatedAt': updatedAt },
     })
   )
+}
+
+// ── Batch display-name lookup ─────────────────────────────────────────────────
+
+/**
+ * Fetches displayName for up to 100 userIds in a single BatchGetItem call.
+ * Missing accounts (deleted users) map to 'Deleted User'.
+ * Used by list-comments to enrich comment items before returning them.
+ */
+export const batchGetUserDisplayNames = async (
+  client: DynamoDBDocumentClient,
+  userIds: string[]
+): Promise<Map<string, string>> => {
+  const map = new Map<string, string>()
+  if (userIds.length === 0) return map
+
+  const result = await client.send(
+    new BatchGetCommand({
+      RequestItems: {
+        [TABLE_NAME]: {
+          Keys: userIds.map((id) => userAccountKey(id)),
+          ProjectionExpression: 'userId, displayName',
+        },
+      },
+    })
+  )
+
+  const items = (result.Responses?.[TABLE_NAME] ?? []) as Array<{ userId: string; displayName: string }>
+  for (const item of items) {
+    map.set(item.userId, item.displayName ?? 'Deleted User')
+  }
+
+  return map
 }

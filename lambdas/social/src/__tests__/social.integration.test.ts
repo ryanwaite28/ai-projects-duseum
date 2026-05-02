@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest'
 import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import { handler } from '../index.js'
-import { docClient, TABLE, makeCtx, makeEvent, seedArtwork } from './setup.js'
+import { docClient, TABLE, makeCtx, makeEvent, seedArtwork, seedUserAccount } from './setup.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -254,6 +254,43 @@ describe('GET /artworks/{artworkId}/comments', () => {
     const p2Body = JSON.parse(page2.body)
     expect(p2Body.items).toHaveLength(2)
     expect(p2Body.nextCursor).toBeNull()
+  })
+
+  // FR-TESTING-06: regression — authorDisplayName was undefined, crashing .slice(0,2) in UI
+  it('enriches items with authorDisplayName from UserAccount', async () => {
+    await seedUserAccount(VIEWER_A, 'Alice Viewer')
+    await seedArtwork(ARTWORK_ID, ARTWORK_AUTHOR)
+
+    await callHandler(makeEvent(
+      'POST', `/artworks/${ARTWORK_ID}/comments`,
+      { userId: VIEWER_A, body: { body: 'Great piece!' }, pathParameters: { artworkId: ARTWORK_ID } }
+    ))
+
+    const res  = await callHandler(makeEvent(
+      'GET', `/artworks/${ARTWORK_ID}/comments`,
+      { pathParameters: { artworkId: ARTWORK_ID } }
+    ))
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.items).toHaveLength(1)
+    expect(body.items[0].authorDisplayName).toBe('Alice Viewer')
+  })
+
+  it('falls back to "Deleted User" when commenter UserAccount is not found', async () => {
+    await seedArtwork(ARTWORK_ID, ARTWORK_AUTHOR)
+
+    await callHandler(makeEvent(
+      'POST', `/artworks/${ARTWORK_ID}/comments`,
+      { userId: VIEWER_A, body: { body: 'Ghost comment' }, pathParameters: { artworkId: ARTWORK_ID } }
+    ))
+
+    const res  = await callHandler(makeEvent(
+      'GET', `/artworks/${ARTWORK_ID}/comments`,
+      { pathParameters: { artworkId: ARTWORK_ID } }
+    ))
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.items[0].authorDisplayName).toBe('Deleted User')
   })
 })
 

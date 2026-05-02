@@ -123,7 +123,7 @@ export interface AuthorCollection {
   description:   string | null
   coverPieceUrl: string | null
   pieceCount:    number
-  visibility:    'PUBLIC' | 'PRIVATE'
+  visibility:    'FREE' | 'SUBSCRIBER_ONLY'
 }
 
 // ── Comment ───────────────────────────────────────────────────────────────────

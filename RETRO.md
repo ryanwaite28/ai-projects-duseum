@@ -262,6 +262,149 @@ Notable implementations in this phase:
 
 ---
 
+## Phase 7 — Runtime Data Dependencies: The Third Category (May 2)
+
+### What happened
+
+Two subscription flows were broken in both dev and prod:
+
+1. **Platform subscription checkout** returned "An unexpected error occurred" on the frontend. Investigation revealed two compounding issues: a code bug (`getConfigValue` used the wrong DynamoDB key pattern — `{ PK: 'CONFIG', SK: key }` instead of `{ PK: key }`) and a data gap — the config table in both environments was completely empty. `PLATFORM_SUB_PRICE_ID` was never seeded. Even after the code fix was deployed, the feature remained broken until the config table was populated and the Stripe platform subscription product + price were created in the prod Stripe account (the dev Stripe account had them already; prod did not).
+
+2. **Author subscriptions** had no config table dependency, but the root confusion was the same: a runtime data gap that looked like a code bug.
+
+The symptom — "an unexpected error occurred" — gave no indication whether the cause was code, infrastructure, or data. The first debugging instinct was to look at the code. But even perfectly correct code cannot work if the data it depends on doesn't exist in production.
+
+### The three categories of dependencies
+
+Any deployed feature depends on three things:
+
+| Category | Managed by | Verified by |
+|---|---|---|
+| Code dependencies | npm / TypeScript imports | Typecheck, unit tests |
+| Infrastructure dependencies | CDK (tables, queues, buckets) | CDK deploy, smoke tests |
+| **Runtime data dependencies** | **Manual bootstrap** | **Nothing — until now** |
+
+Only the first two are managed by CI/CD. Runtime data dependencies — the rows and items that must exist inside those infrastructure resources for features to function — are invisible to code review, typecheck, integration tests (which seed their own data), and deployment pipelines.
+
+### Why this is easy to miss
+
+- **Tests pass locally** — integration tests (MiniStack) seed their own config rows in `beforeAll`. Local tests passing says nothing about whether production data is seeded.
+- **The error is misleading** — "Platform subscription is not configured" and "An unexpected error occurred" sound like code bugs or misconfigurations, not missing data rows.
+- **The dependency is implicit** — a Lambda reads `getConfigValue('PLATFORM_SUB_PRICE_ID')` from a table that CDK creates. CDK says nothing about what must be in that table. The code says nothing about how it gets there. The gap is invisible.
+- **Each environment is independent** — even if dev is seeded, prod is a separate environment with its own config table and its own Stripe account. Both must be bootstrapped independently.
+
+### The fix
+
+Three changes were made to prevent this class of issue going forward:
+
+1. **`specs/infrastructure/environment-bootstrap.md`** — a new canonical spec that documents every config table key, every required Stripe resource (product ID, price ID), and every required Secret, with the current values for both environments and CLI commands to seed or verify them. Any spec that introduces a new config table key must update this document.
+
+2. **CLAUDE.md `Runtime Data Dependencies` section** — added immediately after the Pre-Provisioned Infrastructure table. Documents the current required config keys (with dev + prod values), the associated Stripe resources, and a rule: before diagnosing a code bug on a live feature, run `/env-health` to confirm data is present.
+
+3. **`/env-health` command** (`.claude/commands/env-health.md`) — a new slash command that checks both environments' config tables (all required keys present), Secrets Manager (all secrets present), and Stripe (price ID in config references an active Stripe Price). Surfaces missing data before debugging begins.
+
+### General lessons (applicable to any project)
+
+**Track runtime data dependencies explicitly, with the same rigor as code and infrastructure.** Every feature that reads from a config store, a feature-flag service, or an external API (Stripe, Twilio, SendGrid) has a runtime data prerequisite. That prerequisite must be:
+  - Documented alongside the feature spec
+  - Listed in an environment bootstrap document
+  - Verifiable with a health check command
+  - Seeded in every environment independently — local seeds do not carry over
+
+**"Works in tests, broken in prod" often means missing runtime data, not broken code.** When a feature passes all automated tests but fails in a live environment, check the data before reading the code. The root question is: "does the data this code depends on actually exist in this environment?"
+
+**Local test isolation is a liability as well as an asset.** Integration tests that seed their own data in `beforeAll` are correct and fast — but they prove the code works when the data is present, not that the data is present in production. The two questions are orthogonal.
+
+**The bootstrap document is a living spec, not a one-time checklist.** Every time a feature is added that reads a config value, the bootstrap document gets a new row. Every time a new environment is provisioned, the bootstrap document is the runbook. If it's out of date, the next environment bootstrap will fail in a different place.
+
+**Make the health check a first-class command.** The instinct when something is broken is to look at logs, read code, and re-read the spec. A `/env-health` command short-circuits that cycle by answering "is all the data present?" in 30 seconds. The command should be the first thing run when a live feature misbehaves.
+
+---
+
+## Phase 8 — Automated Dependency Health Checking (May 2)
+
+### What happened
+
+Phase 7 established that runtime data dependencies were the third, invisible category of dependencies — and added `specs/infrastructure/environment-bootstrap.md` plus the `/env-health` command to document and surface them. But the fix was reactive: it required a human to remember to run `/env-health` when something broke.
+
+Two questions remained unanswered:
+
+1. **How do you catch a missing prerequisite _before_ CDK deploys?** If `bootstrap.sh` was not run, CDK deploy would proceed and fail silently at runtime (not at deploy time). The pipeline had no early-warning signal.
+
+2. **How do you catch a seeded-but-wrong data dependency _after_ CDK deploys, before marking the pipeline green?** Smoke tests proved the API was reachable, but never checked whether the data those API routes depended on was present and correct.
+
+Additionally, `bootstrap.sh` itself was discovered to be incomplete: it seeded Secrets Manager and SSM (§1–3) and provisioned CloudFront keys, OIDC, and IAM roles (§4–6), but it omitted two critical items:
+- **§3.6** — DynamoDB config table seeding (the six static config keys)
+- **§3.7** — Stripe platform subscription product + price provisioning and `PLATFORM_SUB_PRICE_ID` seeding
+
+Local MiniStack mode (lines 261–273 of `bootstrap.sh`) DID seed the config table, creating the false impression that bootstrap was complete. In production mode, the config table was left empty.
+
+### The fix
+
+**Three layers**, each addressing a different point in the deployment lifecycle:
+
+#### Layer 1: `bootstrap.sh` completeness (provisioning)
+
+Added §3.6 and §3.7 to `bootstrap.sh`:
+
+- **§3.6** `seed_config_table()` — seeds all six static config keys (`PLATFORM_CUT_PERCENT`, `FREE_TIER_LIMIT`, `WEEKLY_FEATURE_FEE_USD`, `WEEKLY_FEATURE_SLOT_COUNT`, `WEEKLY_FEATURE_ADVANCE_WEEKS`). Idempotent — uses `attribute_not_exists(PK)` condition expression.
+- **§3.7** `provision_stripe_platform_price()` — checks SSM at `/duseum/{env}/stripe/platform_price_id` first; if the price ID already exists, skips creation (idempotency via SSM as the guard). Otherwise: calls Stripe API to create a product + $10/month price, stores the price ID in SSM, then seeds `PLATFORM_SUB_PRICE_ID` into the config table.
+
+Both sections run for dev and prod. `scripts/.secrets.env.example` was rewritten to document what bootstrap creates vs. what the operator must supply (Stripe keys and webhook secrets only).
+
+#### Layer 2: `_pre-deploy-check.yml` — shift-left, parallel with Build
+
+A new reusable workflow that runs **in parallel with the Build job** (both need only `[ci]`; Deploy gates on both). Zero pipeline latency overhead when prerequisites are healthy.
+
+Script: `scripts/pre-deploy-check.sh {env}`
+
+Checks only things `bootstrap.sh` creates — not CDK-managed resources (DynamoDB tables, SQS, Lambda don't exist yet on first deploy and should not block CDK):
+- S3 bucket `duseum-cicd-artifacts`
+- 7 Secrets Manager secrets (`duseum/{env}/stripe/*`, `duseum/{env}/cloudfront/*`, `duseum/{env}/hmac/*`)
+- SSM: `/duseum/{env}/cloudfront/key_pair_id`, `/duseum/{env}/stripe/platform_price_id`
+- IAM roles: `duseum-github-actions-deploy-{env}`, `duseum-github-actions-build`
+
+Failure message is concrete: "Run `bash scripts/bootstrap.sh` to provision missing prerequisites."
+
+#### Layer 3: `_dep-check.yml` — post-deploy, gates smoke tests
+
+A new reusable workflow that runs after `Deploy Frontend` and must pass before `Smoke Test`. Script: `scripts/dep-check.sh {env}`.
+
+**Smart failure logic** — the key insight is that "table not found" and "key not found" are different failure modes requiring different fixes:
+
+| Condition | Cause | Fix |
+|---|---|---|
+| `describe-table` → `ResourceNotFoundException` | CDK deploy failed | Re-run CDK deploy |
+| Table present, key missing | bootstrap.sh §3.6 not run | Re-run bootstrap.sh |
+| Key present, value is `REPLACE_WITH_*` placeholder | bootstrap.sh §3.7 did not complete | Re-run bootstrap.sh |
+| Key present, Stripe price inactive | Price was manually archived | Create new price, re-run bootstrap |
+
+This distinction prevents a real pipeline failure (CDK deploy broke something) from being misdiagnosed as an operator error (forgot to run bootstrap), and vice versa.
+
+### Pipeline shape after this phase
+
+```
+CI → [Build ∥ Bootstrap Check] → Deploy → Deploy Frontend → Dep Check → Smoke Test
+```
+
+`Bootstrap Check` and `Build` run in parallel. `Deploy` gates on both. `Smoke Test` gates on `Dep Check`. The pipeline now catches all three failure categories before marking a deployment green.
+
+### Lessons learned
+
+**A provisioning script that is incomplete is worse than no provisioning script.** An incomplete script creates the false impression that setup is done — the operator runs it, sees success, and moves on. The missing items stay missing and surface as mysterious runtime failures later. Every category of required external resource must be in the provisioning script: secrets, SSM, S3 buckets, DynamoDB config seeds, Stripe resources, IAM, OIDC. If it isn't in bootstrap.sh, it isn't bootstrapped.
+
+**Local test modes that seed their own data are not a reliable indicator of bootstrap completeness.** MiniStack mode in `bootstrap.sh` seeded the config table. This created the appearance that seeding was handled. In production mode, it was not. Whenever a local-only code path covers something the production path omits, the omission will only be discovered in production.
+
+**Pipeline health checks should be assertive, not passive.** A smoke test that checks HTTP 200 on the login endpoint says nothing about whether the config table is seeded. The health check must specifically verify the data the features depend on — not just that the infrastructure is reachable.
+
+**"Smart" failure messages save debugging time.** The difference between "dependency check failed" and "config table not found — this usually means CDK deploy failed; re-run the deploy workflow" is the difference between 30 minutes of debugging and 5 minutes of action. When a health check fails, the error message should name the specific resource, its expected state, and the command to fix it.
+
+**The provisioning script and the pre-deploy check must evolve together.** When bootstrap.sh adds a new provisioned resource, pre-deploy-check.sh must add the corresponding verification. If they drift, the check provides false assurance. Encode this as a rule in CLAUDE.md: "When adding a section to bootstrap.sh, add the corresponding check to pre-deploy-check.sh."
+
+**Make runtime data dependencies first-class citizens of the spec process.** Before this phase, a spec could be written and implemented without ever specifying what data it depended on at runtime. After: every spec that introduces a new config key or external resource dependency must (1) add it to dep-check.sh, (2) add provisioning to bootstrap.sh, (3) update the environment-bootstrap doc, (4) include done-when items for seeding both environments. The spec gate now covers runtime data, not just code and infrastructure.
+
+---
+
 ## Cross-Cutting Lessons
 
 ### 1. The spec gate applies to everything — including test fixes and CI failures
@@ -336,6 +479,20 @@ Both Stripe account IDs, both Connect Client IDs, all four webhook destination I
 
 Using `{env}` prefix on every resource name (`duseum-dev-dynamodb-main`, `duseum-prod-dynamodb-main`) to isolate dev and prod within the same AWS account worked cleanly. The CDK note about running bootstrap sequentially (dev first, then prod) was important — parallel bootstrap runs on the same account failed with resource conflicts.
 
+### 9. Tests are not optional — they are the proof that implementation is correct
+
+The project had strong backend integration tests (Vitest + MiniStack, real DynamoDB) but two significant gaps:
+
+1. **`GET /authors/{authorId}` had zero integration tests.** The backend returns `{ profile: {...}, gallery: {...} }` — a two-key wrapper — but the frontend service was written to treat the response as a flat `AuthorProfile`. This went undetected for the entire development period because no test ever asserted the response shape. The bug only surfaced as a runtime crash in the browser (`followerCount.toLocaleString()` on `undefined`).
+
+2. **The frontend had no test infrastructure at all** — no vitest, no `@testing-library/react`, no `test` script in `package.json`. Service-layer mapping functions (`getAuthor`, `getAuthorCollections`) were never unit-tested, so field-name mismatches and shape-wrapping bugs were invisible until the page crashed.
+
+**The pattern that would have prevented both crashes:**
+- Every new Lambda route needs an integration test that asserts the exact response shape (not just the status code)
+- Every frontend service function that maps an API response needs a unit test that feeds in a mock API response and asserts the mapped output field by field
+
+**The rule encoded in CLAUDE.md as of this project:** Step 6 of the mandatory process is now "Write or update tests." A spec is not done until tests exist and pass.
+
 ---
 
 ## Process: Ordered Steps for an AI-Driven Project from Scratch
@@ -398,6 +555,10 @@ Based on this project, the recommended sequence for a future production-grade AI
 5. **One PR per spec.** The 13-PRs-in-one-day pattern made git history hard to read. One spec = one branch = one PR keeps history auditable.
 
 6. **Require the spec step even for test failures.** A CI failure is not a shortcut around the process — it is the scenario where the process matters most. The correct side to fix (implementation vs. test) cannot be determined without first reading PROJECT.md and the spec. Encode this explicitly in CLAUDE.md from the start, not as an afterthought.
+
+7. **Bootstrap frontend test infrastructure on day 1.** The frontend had no test runner, no `@testing-library/react`, and no `test` script in `package.json` for the entire project. Adding it after-the-fact required retrofitting. If `vitest` + `@testing-library/react` had been wired up in the initial scaffold, service-layer unit tests would have been written alongside every feature spec.
+
+8. **Make the provisioning script complete and verifiable from the start.** `bootstrap.sh` was written early but omitted DynamoDB config seeding and Stripe resource provisioning — the two items that caused the Phase 7 incident. If every category of external dependency (secrets, SSM, S3, DynamoDB seeds, Stripe resources, IAM, OIDC) had been added to bootstrap.sh at the time the feature was first specced, the runtime data gaps would never have existed. Pair the provisioning script with a pre-deploy health check from day 1, so any missing prerequisite fails the pipeline before CDK runs.
 
 ---
 

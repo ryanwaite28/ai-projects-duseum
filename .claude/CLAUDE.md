@@ -21,7 +21,17 @@ You are a **master systems design architect, DevOps & Software Engineer**. Apply
 3. **Write or update a spec** using the Section 13.7 format below; for test-only fixes, state explicitly which side (implementation or test) is wrong and why, with PROJECT.md/spec citations
 4. **Wait for the user to reply: "Approved — proceed."** — do not write implementation code until this exact phrase is received
 5. **Implement** — only the files listed in the approved spec
-6. **Update the spec** — tick done-when checkboxes, set Status to ✅ Implemented
+6. **Write or update tests** — unit tests for service-layer mapping and pure functions; integration tests for new or changed Lambda routes; regression tests when fixing a bug. No spec is complete until tests are written and pass.
+7. **Update the spec** — tick done-when checkboxes, set Status to ✅ Implemented
+
+**Testing requirements by layer** (see PROJECT.md Section 15.4 for FR-TESTING codes):
+- **Lambda routes** (FR-TESTING-01/02): integration test against MiniStack (real DynamoDB at `localhost:4566`) using the existing Vitest + `setup.ts` pattern in each `lambdas/{name}/src/__tests__/` directory. Every new route needs: happy path, 404/error cases, and response shape assertion. Routes with nested response shapes must assert exact top-level key names.
+- **Frontend service unit tests** (FR-TESTING-03): unit test every field mapping in the response `.then()` using `vi.mock` on the `api` module. Lives in `frontend/src/services/__tests__/`. 100% of service files must have a test file.
+- **Frontend component tests** (FR-TESTING-05): React Testing Library tests in `frontend/src/components/__tests__/`. Every significant component must cover: (a) all conditional rendering branches (access tier, subscription state, auth state, loading), (b) mutation calls on user interaction, (c) unauthenticated redirect, (d) error state rendering. Use `render` from `src/test/test-utils.tsx` (pre-wrapped in QueryClientProvider + MemoryRouter); mock Zustand stores and service modules via `vi.mock`. Added when the component is first written — not as a follow-up.
+- **Shared package functions** (FR-TESTING-04): unit test pure functions — especially `checkArtPieceAccess()` for all 8 tier × visibility combinations.
+- **Regression** (FR-TESTING-06): when fixing a bug, add a test that would have caught it. The test description must name the symptom (e.g. `followerCount.toLocaleString() crash`). A bug with no regression test is a bug that will recur.
+- **Webhooks** (FR-TESTING-07): idempotency must be integration-tested — replaying the same Stripe eventId must produce no duplicate DynamoDB writes.
+- Test coverage is tracked in `specs/testing/test-coverage.md`. **The gap table must be fully green before a spec can be marked ✅ Implemented.**
 
 **This process applies to ALL of the following — no category is exempt:**
 - New routes, handlers, or Lambda functions
@@ -34,6 +44,7 @@ You are a **master systems design architect, DevOps & Software Engineer**. Apply
 - Test fixes or corrections (failing CI, wrong assertions, missing fixtures)
 - Frontend component changes, style corrections, or copy edits
 - Config value changes or environment variable additions
+- **New config table keys or Stripe resource dependencies** — spec must include a "Runtime Data Prerequisites" section; follow the four-step rule in the Runtime Data Dependencies → Rules section (dep-check.sh + bootstrap.sh + docs + done-when items)
 
 **Never skip steps 1–4** — not for "obvious" fixes, not for single-line changes, not for CI failures, not for test expectation corrections. The spec IS the approval gate — a "yes sounds good" or "approve" in chat is not an approval to write code. Only the exact phrase **"Approved — proceed."** unlocks implementation.
 
@@ -64,6 +75,53 @@ These resources already exist in account `408141212087`. Reference them, never r
 | Stripe Account webhook (dev) | ✅ Exists | `https://api.dev.duseum.com/webhooks/stripe` — destination ID: `we_1TSHYrDeejIUwJISbtordMME` — "Events from: Your account" |
 | Stripe Account webhook (prod) | ✅ Exists | `https://api.prod.duseum.com/webhooks/stripe` — destination ID: `we_1TSHcWRUKQLlSd6o23Jx4hyx` — "Events from: Your account" |
 | Secrets Manager secrets (dev + prod) | ✅ Seeded | All Stripe keys, CloudFront private key, unsubscribe HMAC secret — see PHASE-0.4 |
+
+## Runtime Data Dependencies
+
+> **Before diagnosing a code bug on a live feature**: run `/env-health` to verify all runtime data is present. A "not configured" or "not found" error that passes all tests locally is almost always a missing config table row, not a code bug.
+
+CDK creates AWS resources but does **not** seed data into them. Three categories of runtime data must exist before features work in a live environment:
+
+| Category | Where | Managed by |
+|---|---|---|
+| Config table keys | `duseum-{env}-dynamodb-config` | `scripts/bootstrap.sh` §3.6 |
+| Stripe products/prices | Stripe account for the environment | `scripts/bootstrap.sh` §3.7 |
+| Secrets | Secrets Manager `duseum/{env}/...` | `scripts/bootstrap.sh` §1–2 |
+
+**`scripts/bootstrap.sh` is the single authoritative script for all external resource provisioning** (AWS + Stripe). It is idempotent — safe to re-run. The pipeline's `_pre-deploy-check.yml` job verifies its outputs before every CDK deploy. The `_dep-check.yml` job verifies runtime data is seeded after every CDK deploy.
+
+### Config table — current required keys (both environments seeded 2026-05-02)
+
+| Key | Dev value | Prod value | Feature |
+|---|---|---|---|
+| `PLATFORM_SUB_PRICE_ID` | `price_1TMYgkDeejIUwJISc1SBdOXV` | `price_1TSdktRUKQLlSd6o4QGRZnOp` | Platform subscription checkout |
+| `PLATFORM_CUT_PERCENT` | `20` | `20` | Author subscription revenue split |
+| `FREE_TIER_LIMIT` | `5` | `5` | Free-tier artwork access gate |
+| `WEEKLY_FEATURE_FEE_USD` | `50` | `50` | Weekly feature booking fee |
+| `WEEKLY_FEATURE_SLOT_COUNT` | `3` | `3` | Simultaneous weekly feature slots |
+| `WEEKLY_FEATURE_ADVANCE_WEEKS` | `3` | `3` | Booking window in advance |
+
+### Stripe platform subscription resources
+
+| Env | Product | Price ID | Amount |
+|---|---|---|---|
+| dev | `prod_ULFBXnQSuGApqJ` | `price_1TMYgkDeejIUwJISc1SBdOXV` | $10.00/month |
+| prod | `prod_URWopE8gA1XDQT` | `price_1TSdktRUKQLlSd6o4QGRZnOp` | $10.00/month |
+
+Full bootstrap procedure and seeding commands: `specs/infrastructure/environment-bootstrap.md`
+
+### Rules
+
+- **Any spec that introduces a new config table key or external resource dependency** must:
+  1. Add the key to `REQUIRED_KEYS` in `scripts/dep-check.sh`
+  2. Add provisioning logic to `scripts/bootstrap.sh` (idempotent)
+  3. Add a row to the config table keys table above, and update `specs/infrastructure/environment-bootstrap.md`
+  4. Include done-when items for seeding both dev and prod in the spec
+- **When a live feature returns an unexpected error**: run `/env-health {env}` before reading code. If any config key is missing, seed it first. Only investigate code if the data is confirmed present.
+- **MiniStack seeds its own config rows** (see `scripts/ministack-init/`). Local tests passing does not prove production config is seeded.
+- **`scripts/pre-deploy-check.sh` must stay in sync with `bootstrap.sh` outputs** — when bootstrap.sh adds a new provisioned resource, add the corresponding check to pre-deploy-check.sh.
+
+---
 
 ## AWS CLI
 

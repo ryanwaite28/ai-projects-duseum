@@ -19,7 +19,7 @@ function CollectionModal({
 }) {
   const [title,       setTitle]       = useState(initial?.title ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
-  const [visibility,  setVisibility]  = useState<'PUBLIC' | 'PRIVATE'>(initial?.visibility ?? 'PUBLIC')
+  const [visibility,  setVisibility]  = useState<'FREE' | 'SUBSCRIBER_ONLY'>(initial?.visibility ?? 'FREE')
   const [error,       setError]       = useState<string | null>(null)
 
   const save = useMutation({
@@ -61,11 +61,11 @@ function CollectionModal({
             <label className="block text-[0.68rem] tracking-[0.14em] uppercase text-stone-light mb-1">Visibility</label>
             <select
               value={visibility}
-              onChange={(e) => setVisibility(e.target.value as 'PUBLIC' | 'PRIVATE')}
+              onChange={(e) => setVisibility(e.target.value as 'FREE' | 'SUBSCRIBER_ONLY')}
               className={`${inputCls} appearance-none cursor-pointer`}
             >
-              <option value="PUBLIC">Public</option>
-              <option value="PRIVATE">Private</option>
+              <option value="FREE">Free</option>
+              <option value="SUBSCRIBER_ONLY">Subscribers only</option>
             </select>
           </div>
           {error && <p className="text-[0.8rem] text-[#c0544a]">{error}</p>}
@@ -277,8 +277,8 @@ export function CollectionsTab() {
                 )}
                 <p className="mt-2 text-[0.68rem] text-stone-light">
                   {col.pieceCount} piece{col.pieceCount !== 1 ? 's' : ''} ·{' '}
-                  <span className={col.visibility === 'PUBLIC' ? 'text-[#5a9e6e]' : 'text-gold'}>
-                    {col.visibility}
+                  <span className={col.visibility === 'FREE' ? 'text-[#5a9e6e]' : 'text-gold'}>
+                    {col.visibility === 'FREE' ? 'Free' : 'Subscribers only'}
                   </span>
                 </p>
               </div>
