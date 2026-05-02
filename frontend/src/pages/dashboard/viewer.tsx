@@ -109,7 +109,9 @@ function SubscriptionsSummary() {
                 <div>
                   <p className="text-[0.88rem] font-medium text-parchment">Platform plan</p>
                   <p className="text-[0.72rem] font-light text-stone-light mt-0.5">
-                    Renews {new Date(platform.currentPeriodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {platform.currentPeriodEnd
+                      ? `Renews ${new Date(platform.currentPeriodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                      : 'Active'}
                   </p>
                 </div>
               </div>

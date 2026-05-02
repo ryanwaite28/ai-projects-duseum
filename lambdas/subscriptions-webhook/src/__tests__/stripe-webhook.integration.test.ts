@@ -48,11 +48,15 @@ import { handler } from '../index.js'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
+// Stripe API 2026-03-25.dahlia: current_period_end moved from subscription root
+// into items.data[]. Top-level field no longer exists.
 const makeSub = (overrides: Record<string, unknown> = {}) => ({
   id: 'sub_test_001',
   customer: 'cus_test_001',
   status: 'active',
-  current_period_end: Math.floor(Date.now() / 1000) + 86400 * 30,
+  items: {
+    data: [{ current_period_end: Math.floor(Date.now() / 1000) + 86400 * 30 }],
+  },
   metadata: { userId: 'user-001', type: 'PLATFORM' },
   ...overrides,
 })
@@ -164,6 +168,22 @@ describe('subscriptions-webhook handler', () => {
   })
 
   // ── payment_intent events (WeeklyFeature) ─────────────────────────────────
+
+  // ── regression: Stripe API 2026-03-25.dahlia ─────────────────────────────
+
+  it('customer.subscription.created with null current_period_end in items → writes record, currentPeriodEnd null (regression: Stripe 2026-03-25.dahlia)', async () => {
+    const raw = makeStripeEvent('evt_rg_001', 'customer.subscription.created', makeSub({
+      id: 'sub_rg_001',
+      items: { data: [{ current_period_end: null }] },
+    }))
+    const result = await handler(makeSqsEvent(raw) as never)
+
+    expect(result.batchItemFailures).toHaveLength(0)
+    const item = await getItem(MAIN_TABLE, { PK: 'USER#user-001', SK: 'SUB#PLATFORM' })
+    expect(item).not.toBeNull()
+    expect(item?.status).toBe('ACTIVE')
+    expect(item?.currentPeriodEnd).toBeNull()
+  })
 
   it('payment_intent.succeeded for a past week → sets status CONFIRMED (awaits Monday rotation)', async () => {
     await seedBooking()

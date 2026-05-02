@@ -241,6 +241,7 @@ All IAM resources tagged: `Project=duseum`, `Environment={env}`, `ManagedBy=CDK`
 - Don't log PII (email, names, payment info) — see Section 13.2
 - Don't tag `v*.*.*` without completing the production go-live checklist (Section 11.7)
 - **Don't write a Lambda spec that calls `getConfigValue()` or `getConfigNumber()` without explicitly adding `dynamodb:GetItem` on `configTableName` to `initialPolicy`** — CDK synth succeeds without it, but the Lambda throws `AccessDeniedException` at runtime. The omission is invisible until a user hits the endpoint. Pattern: `new iam.PolicyStatement({ sid: '...ConfigRead', actions: ['dynamodb:GetItem'], resources: dynamoArns(this, configTableName) })`
+- **Don't declare `current_period_end` at the top level of a `StripeSubscription` local type** — in Stripe API `2026-03-25.dahlia` (and later), this field was moved from the subscription root into each `items.data[]` entry. Read it as `sub.items.data[0]?.current_period_end ?? null`. `Subscription.currentPeriodEnd` must be typed `string | null` and every render site must guard for null. Accessing the old top-level field returns `undefined`, and `new Date(undefined * 1000).toISOString()` throws `"Invalid time value"` — causing the Lambda to crash, the SQS event to DLQ, and no record to be written.
 
 ---
 

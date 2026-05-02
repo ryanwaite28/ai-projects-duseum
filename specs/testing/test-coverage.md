@@ -99,7 +99,7 @@
 - `lambdas/features/src/__tests__/weekly-and-bookings.integration.test.ts` — `GET /features/weekly`, `GET /features/weekly/my-bookings`
 - `lambdas/subscriptions/src/__tests__/subscriptions.integration.test.ts` — extended with `GET /subscriptions/me/subscribers`
 - `lambdas/subscriptions/src/__tests__/setup.ts` — added `GSI-SubscribersByAuthor` to table definition
-- `lambdas/subscriptions-webhook/src/__tests__/stripe-webhook.integration.test.ts` — extended: current-week `payment_intent.succeeded` → immediately ACTIVE; past-week → CONFIRMED; test description clarified
+- `lambdas/subscriptions-webhook/src/__tests__/stripe-webhook.integration.test.ts` — extended: current-week `payment_intent.succeeded` → immediately ACTIVE; past-week → CONFIRMED; test description clarified; `makeSub` fixture updated to Stripe API `2026-03-25.dahlia` shape (`items.data[]`); regression test for `current_period_end: null` → `currentPeriodEnd: null` written, no crash
 - `lambdas/maintenance/src/__tests__/weekly-rotation.integration.test.ts` — extended: safety-net test for CONFIRMED previous-week → ARCHIVED
 
 ### Frontend service unit tests

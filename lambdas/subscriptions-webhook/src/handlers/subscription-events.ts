@@ -12,11 +12,15 @@ import type { Subscription } from '@duseum/shared'
 import { upsertSubscription } from '@duseum/shared'
 import { logger } from './logger.js'
 
+// In Stripe API version 2026-03-25.dahlia, current_period_end moved from the
+// subscription root into each items.data[] entry. The top-level field no longer exists.
 type StripeSubscription = {
   id: string
   customer: string
   status: string
-  current_period_end: number
+  items: {
+    data: Array<{ current_period_end: number | null }>
+  }
   metadata: Record<string, string>
 }
 
@@ -64,7 +68,10 @@ const buildRecord = (
     stripeSubscriptionId: sub.id,
     stripeCustomerId: typeof sub.customer === 'string' ? sub.customer : '',
     status,
-    currentPeriodEnd: new Date(sub.current_period_end * 1000).toISOString(),
+    currentPeriodEnd: (() => {
+      const ts = sub.items?.data?.[0]?.current_period_end ?? null
+      return ts != null ? new Date(ts * 1000).toISOString() : null
+    })(),
     createdAt: new Date().toISOString(),
   }
 }
