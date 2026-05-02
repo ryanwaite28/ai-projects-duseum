@@ -196,6 +196,7 @@ All IAM resources tagged: `Project=duseum`, `Environment={env}`, `ManagedBy=CDK`
 14. **Tag all AWS resources** with: `Project=duseum`, `Environment={env}`, `Stack={stackName}`. See Section 13.5.
 15. **Cross-stack wiring via SSM only.** Never use `Fn.importValue()` or CDK `CfnOutput` cross-stack references. See Section 13.5.
 16. **PRIVATE piece notifications go to Author Subscribers only** — not to mere followers. PUBLIC piece notifications go to all followers. This logic lives in `notifications-lambda` only.
+17. **Every Lambda that calls `getConfigValue()` or `getConfigNumber()` must have `dynamodb:GetItem` on `configTableName` in its `initialPolicy`.** This must be listed explicitly in the spec's IAM section before "Approved — proceed." is given. Omitting it causes `AccessDeniedException` at runtime — not at CDK synth or deploy time. See `api-stack.ts` for the `SubsConfigRead` policy pattern.
 
 ---
 
@@ -238,6 +239,7 @@ All IAM resources tagged: `Project=duseum`, `Environment={env}`, `ManagedBy=CDK`
 - Don't return raw Error messages to API clients — use AppError subclasses (Section 6.7)
 - Don't log PII (email, names, payment info) — see Section 13.2
 - Don't tag `v*.*.*` without completing the production go-live checklist (Section 11.7)
+- **Don't write a Lambda spec that calls `getConfigValue()` or `getConfigNumber()` without explicitly adding `dynamodb:GetItem` on `configTableName` to `initialPolicy`** — CDK synth succeeds without it, but the Lambda throws `AccessDeniedException` at runtime. The omission is invisible until a user hits the endpoint. Pattern: `new iam.PolicyStatement({ sid: '...ConfigRead', actions: ['dynamodb:GetItem'], resources: dynamoArns(this, configTableName) })`
 
 ---
 

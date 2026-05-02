@@ -405,6 +405,69 @@ CI → [Build ∥ Bootstrap Check] → Deploy → Deploy Frontend → Dep Check 
 
 ---
 
+## Phase 9 — The Fourth Dependency Category: IAM Execution Permissions (May 2)
+
+### What happened
+
+`POST /subscriptions/platform` and `POST /subscriptions/authors/{authorId}` failed in production with `AccessDeniedException`. The `subscriptions-lambda` execution role had no `dynamodb:GetItem` permission on `duseum-dev-dynamodb-config`. The routes called `getConfigValue(docClient, 'PLATFORM_SUB_PRICE_ID')` and `getConfigValue(docClient, 'PLATFORM_CUT_PERCENT')` — both require `GetItem` on the config table — but the CDK `initialPolicy` block for that Lambda only granted access to the main table and Secrets Manager.
+
+The symptom was a 500 error in production. The CloudWatch log showed `AccessDeniedException` on `dynamodb:GetItem` on the config table ARN.
+
+### The four categories of dependencies
+
+This incident revealed a **fourth category** of dependency, distinct from the three established in Phase 7/8:
+
+| Category | Created by | Verified by | When it fails |
+|---|---|---|---|
+| Code dependencies | npm / imports | Typecheck, unit tests | Build time |
+| Infrastructure dependencies | CDK (tables, queues, roles) | CDK deploy success | Deploy time |
+| Runtime data dependencies | bootstrap.sh | dep-check.sh | First request |
+| **IAM execution permissions** | **CDK initialPolicy blocks** | **Nothing — until runtime** | **First request** |
+
+IAM execution permissions are technically part of infrastructure (CDK creates them), but they are **silent at deploy time**. CDK synth accepts a Lambda with no config table access. CDK deploy succeeds. The Lambda starts. The first user request fails with a 500.
+
+The gap is invisible because:
+- **CDK synth validates policy statement syntax, not coverage.** A `PolicyStatement` with a typo in the action name fails synth. A `PolicyStatement` that is simply absent for a needed permission does not.
+- **Integration tests use MiniStack credentials**, which have `AdministratorAccess` — they never exercise IAM boundaries. A test that calls `getConfigValue()` against MiniStack passes regardless of what `initialPolicy` says.
+- **The error message points to the call site, not the CDK code.** Seeing `AccessDeniedException` at `subscriptions.repository.ts:128` sends the debugger to application code, not to `api-stack.ts`.
+
+### The fix
+
+**CDK change (additive only):**
+```typescript
+new iam.PolicyStatement({
+  sid: 'SubsConfigRead',
+  effect: iam.Effect.ALLOW,
+  actions: ['dynamodb:GetItem'],
+  resources: dynamoArns(this, configTableName),
+}),
+```
+Added to `subscriptionsLambda.initialPolicy` alongside the existing `mainTableCrudPolicy` and `SubsStripeKey` statements. The IAM comment on that Lambda block was also updated to document the config table access.
+
+**Rule added to CLAUDE.md (Critical Rule #17):** Every Lambda that calls `getConfigValue()` or `getConfigNumber()` must include `dynamodb:GetItem` on `configTableName` in its `initialPolicy`. This must appear in the spec's IAM section before "Approved — proceed." is given.
+
+### Why automated detection is hard for this category
+
+Three approaches were evaluated via the `/devops` skill:
+
+**Post-deploy IAM simulation** (`aws iam simulate-principal-policy`): Rejected. Lambda execution role ARNs include a CloudFormation-generated hash suffix that is unstable across deploys. Discovering the current ARN requires describe-stack-resources calls. Maintaining a separate inventory of "which Lambda needs which permission" creates a second source of truth that will drift from the CDK code.
+
+**Pre-deploy CDK synth static analysis**: Rejected. CDK synth resolves SSM parameters to CloudFormation tokens — not readable ARN strings. Matching "does policy statement X cover resource Y" when both are opaque tokens is unreliable. CDK `@aws-cdk/assertions` unit tests (a separate PR concern) are the correct automated approach, but are out of scope here.
+
+**CLAUDE.md rule (chosen)**: Zero implementation cost. Catches the issue at spec-authorship time, before any code is written. The AI enforces the rule on every future Lambda spec. This is the highest ROI approach for a class of error whose root cause is authoring omission.
+
+### Lessons learned
+
+**CDK synth correctness ≠ runtime permission correctness.** CDK validates that your IAM constructs are syntactically valid. It does not validate that they are sufficient for the code that runs inside the Lambda. Both layers must be verified independently: CDK code review (does the `initialPolicy` cover all SDK calls the Lambda makes?) and runtime behavior (does the Lambda succeed when it runs?).
+
+**MiniStack tests use admin credentials — they never exercise IAM.** This is a fundamental limitation of the local emulation approach: every SDK call succeeds locally because MiniStack credentials bypass IAM. Tests that pass against MiniStack cannot prove the Lambda has correct IAM permissions in production. For IAM coverage, the authoritative check is code review of the CDK policy blocks.
+
+**The fix is at authorship time, not at deploy time.** The correct prevention for this class of error is not a new pipeline check — it is a rule in the spec process that forces IAM coverage to be explicit before implementation begins. If the spec lists "Lambda reads `PLATFORM_SUB_PRICE_ID` from config table" and the mandatory process requires "spec must include IAM section listing all SDK calls and their required permissions," the omission is caught before any CDK code is written.
+
+**IAM omissions are particularly dangerous because they fail silently at deploy and loudly at user request.** The feature appears deployed and healthy — smoke tests pass, the endpoint responds — until a user hits the specific code path that exercises the missing permission. At that point, the error is in production, affecting real users.
+
+---
+
 ## Cross-Cutting Lessons
 
 ### 1. The spec gate applies to everything — including test fixes and CI failures
