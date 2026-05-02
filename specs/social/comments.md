@@ -51,6 +51,10 @@
 - Pin when 2 already pinned → 409
 - Delete by non-owner non-Author non-Admin → 403
 
+**Response enrichment** (bug fix 2026-05-02):
+`GET /artworks/{artworkId}/comments` calls `batchGetUserDisplayNames()` after `listComments()` to merge `authorDisplayName` onto each comment item. Missing accounts default to `'Deleted User'`. This is a read-time enrichment — write-time denormalization was not viable because existing production comments have no stored `authorDisplayName`.
+
 **Tests to write**:
 - Unit: `text` length validation; reply-to-reply rejection
 - Integration: create comment → verify count incremented; pin 2 → third pin rejected; delete by Author of piece vs non-owner
+- FR-TESTING-06 regression: `authorDisplayName` populated from `UserAccount`; fallback to `'Deleted User'` when account missing

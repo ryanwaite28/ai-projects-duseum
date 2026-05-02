@@ -4,6 +4,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
 import {
   NotFoundError,
+  batchGetUserDisplayNames,
   docClient,
   getArtPiece,
   listComments,
@@ -29,12 +30,18 @@ export const listCommentsRoute = async (
 
   const { items, lastKey: nextKey } = await listComments(docClient, { artworkId, limit, lastKey })
 
+  const uniqueAuthorIds = [...new Set(items.map((c) => c.authorId))]
+  const displayNames    = await batchGetUserDisplayNames(docClient, uniqueAuthorIds)
+
   const nextCursor = nextKey
     ? Buffer.from(JSON.stringify(nextKey)).toString('base64url')
     : null
 
   return ok({
-    items: items.map(({ PK: _pk, SK: _sk, ...comment }) => comment),
+    items: items.map(({ PK: _pk, SK: _sk, ...comment }) => ({
+      ...comment,
+      authorDisplayName: displayNames.get(comment.authorId) ?? 'Deleted User',
+    })),
     nextCursor,
   })
 }

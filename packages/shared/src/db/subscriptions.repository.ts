@@ -128,7 +128,7 @@ export const getConfigValue = async (
   const result = await client.send(
     new GetCommand({
       TableName: CONFIG_TABLE_NAME,
-      Key: { PK: 'CONFIG', SK: key },
+      Key: { PK: key },
     })
   )
   return (result.Item?.value as string) ?? null

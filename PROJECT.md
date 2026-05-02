@@ -2339,10 +2339,10 @@ CDK asset:  {github.sha}  (passed as CDK context variable)
 
 #### Deploy Workflows
 
-| Workflow | Trigger | Action |
+| Workflow | Trigger | Pipeline shape |
 |---|---|---|
-| `deploy-dev.yml` | Push to `develop` | Build all Lambda ZIPs → `cdk deploy --all` to dev |
-| `deploy-prod.yml` | Tag `v*.*.*` | Build all Lambda ZIPs → manual approval → `cdk deploy --all` to prod |
+| `deploy-dev.yml` | Push to `develop` | CI → [Build ∥ Bootstrap Check] → Deploy → Deploy Frontend → Dep Check → Smoke Test |
+| `deploy-prod.yml` | Tag `v*.*.*` | CI → [Build ∥ Bootstrap Check] → manual approval → Deploy → Deploy Frontend → Dep Check → Smoke Test |
 
 #### Reusable Workflows
 
@@ -2350,6 +2350,9 @@ CDK asset:  {github.sha}  (passed as CDK context variable)
 |---|---|
 | `_build-lambdas.yml` | Build all Lambda ZIPs with esbuild, upload to S3 artifact bucket |
 | `_cdk-deploy.yml` | Run `cdk deploy --all` for a given environment, reading artifact ZIPs from S3 |
+| `_pre-deploy-check.yml` | Bootstrap prerequisites check — verifies bootstrap.sh outputs exist before CDK deploy |
+| `_dep-check.yml` | Runtime dependency check — verifies config table seeded, secrets present, Stripe price active |
+| `_deploy-frontend.yml` | Build and deploy frontend SPA to S3 + CloudFront invalidation |
 
 ### 9.4 Reusable Workflow — `_build-lambdas.yml`
 
@@ -2554,6 +2557,108 @@ jobs:
         # s3://duseum-cicd-artifacts/prod/smoke-tests/{sha}.results.json
 ```
 
+### 9.8 Dependency Health Checks — `_pre-deploy-check.yml` and `_dep-check.yml`
+
+The pipeline has two dedicated verification jobs that catch a class of failure invisible to CDK and CI: **missing runtime data dependencies** (bootstrap prerequisites not provisioned, config table not seeded, Stripe prices not created).
+
+#### Dependency categories
+
+| Category | Created by | Verified by |
+|---|---|---|
+| Code dependencies | `npm install` | CI (lint, typecheck, tests) |
+| AWS infrastructure | CDK deploy | CDK synth + deploy success |
+| Bootstrap prerequisites | `scripts/bootstrap.sh` | `_pre-deploy-check.yml` (pre-deploy) |
+| Runtime data | `scripts/bootstrap.sh` | `_dep-check.yml` (post-deploy) |
+
+#### `_pre-deploy-check.yml` — Bootstrap prerequisites check (shift-left, parallel with Build)
+
+**Position**: Runs in parallel with `Build`, both needing only `[ci]`. Deploy gates on both. Zero latency overhead when passing.
+
+**Script**: `scripts/pre-deploy-check.sh {env}`
+
+**What it checks** (things `bootstrap.sh` creates, NOT things CDK creates):
+
+| Check | Expected |
+|---|---|
+| S3 bucket `duseum-cicd-artifacts` | Exists (head-bucket) |
+| Secrets Manager: `duseum/{env}/stripe/secret-key` | Exists |
+| Secrets Manager: `duseum/{env}/stripe/webhook-secret` | Exists |
+| Secrets Manager: `duseum/{env}/stripe/webhook-secret-account` | Exists |
+| Secrets Manager: `duseum/{env}/stripe/connect-client-id` | Exists |
+| Secrets Manager: `duseum/{env}/cloudfront/private-key` | Exists |
+| Secrets Manager: `duseum/{env}/notifications/unsubscribe-secret` | Exists |
+| Secrets Manager: `duseum/{env}/ses/from-address` | Exists |
+| SSM: `/duseum/{env}/cloudfront/key_pair_id` | Exists |
+| SSM: `/duseum/{env}/stripe/platform_price_id` | Exists |
+| IAM role: `duseum-github-actions-deploy-{env}` | Exists |
+| IAM role: `duseum-github-actions-build` | Exists |
+
+**What it does NOT check** (CDK manages these):
+- DynamoDB tables, SQS queues, Lambda functions, API Gateway — these don't exist until CDK deploys and should not block a CDK deploy.
+
+**Failure message**: "Run `bash scripts/bootstrap.sh` to provision missing prerequisites."
+
+#### `_dep-check.yml` — Runtime dependency check (post-deploy, gates smoke tests)
+
+**Position**: Runs after `Deploy Frontend`. Smoke Test gates on `dep-check`. This ensures all three dependency categories are healthy before treating the deployment as green.
+
+**Script**: `scripts/dep-check.sh {env}`
+
+**Smart failure logic** (distinguishes acceptable-absent vs real-failure):
+
+| Condition | `describe-table` result | Meaning | Action |
+|---|---|---|---|
+| Table exists, key present, real value | Success | Healthy | ✅ Pass |
+| Table exists, key missing | Success | bootstrap.sh §3.6 not run | ❌ Fail: seed config table |
+| Table exists, key is placeholder `REPLACE_WITH_*` | Success | bootstrap.sh §3.7 incomplete | ❌ Fail: run bootstrap.sh |
+| Table missing | `ResourceNotFoundException` | CDK deploy may have failed | ❌ Fail: re-run CDK deploy |
+
+**Config table keys checked** (all must be present and non-placeholder):
+
+| Key | Expected |
+|---|---|
+| `PLATFORM_SUB_PRICE_ID` | Stripe Price ID `price_*` |
+| `PLATFORM_CUT_PERCENT` | `20` |
+| `FREE_TIER_LIMIT` | `5` |
+| `WEEKLY_FEATURE_FEE_USD` | `50` |
+| `WEEKLY_FEATURE_SLOT_COUNT` | `3` |
+| `WEEKLY_FEATURE_ADVANCE_WEEKS` | `3` |
+
+**Additional checks**:
+- 7 Secrets Manager secrets (same set as pre-deploy-check) — existence only
+- Stripe price `PLATFORM_SUB_PRICE_ID` value → Stripe API `GET /v1/prices/{id}` → status must be `active`
+
+#### Reusable workflow interface
+
+Both `_pre-deploy-check.yml` and `_dep-check.yml` share the same interface:
+
+```yaml
+on:
+  workflow_call:
+    inputs:
+      environment: { required: true, type: string }   # dev | prod — never hardcoded inside
+    secrets:
+      AWS_ROLE_ARN: { required: true }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+```
+
+**OIDC requirement**: The `environment:` and `permissions: id-token: write` declarations are mandatory — the OIDC role trust policy checks the sub claim for `environment:{env}`.
+
+#### Adding new runtime data dependencies
+
+When a new feature requires a new config table key or a new external resource:
+
+1. Add the key to `REQUIRED_KEYS` array in `scripts/dep-check.sh`
+2. Add provisioning logic to `scripts/bootstrap.sh` (idempotent, re-runnable)
+3. Add a row to the config table keys table in `CLAUDE.md` and this section
+4. Update `specs/infrastructure/environment-bootstrap.md` with done-when items for seeding both dev and prod
+
 ---
 
 ## 10. Project Configuration & Setup
@@ -2657,13 +2762,34 @@ export const getStripeKey = async (): Promise<string> => {
 
 ### 11.1 Overview
 
+`scripts/bootstrap.sh` is the **single authoritative provisioning script** for all external resources that CDK cannot manage. Run it once before the first CDK deploy (and re-run idempotently whenever prerequisites need refreshing). The pipeline's `_pre-deploy-check.yml` job verifies its outputs before every CDK deploy.
+
+**What `bootstrap.sh` provisions** (idempotent — safe to re-run):
+
+| Section | What |
+|---|---|
+| §1 | Dev Stripe keys → Secrets Manager |
+| §2 | Prod Stripe keys → Secrets Manager |
+| §3 | Stripe publishable keys → SSM Parameter Store |
+| §3.5 | CI/CD S3 artifact bucket `duseum-cicd-artifacts` |
+| §3.6 | DynamoDB config table rows (static keys: `PLATFORM_CUT_PERCENT`, `FREE_TIER_LIMIT`, `WEEKLY_FEATURE_FEE_USD`, `WEEKLY_FEATURE_SLOT_COUNT`, `WEEKLY_FEATURE_ADVANCE_WEEKS`) |
+| §3.7 | Stripe platform subscription product + price ($10/month), seeds `PLATFORM_SUB_PRICE_ID` into config table |
+| §4 | CloudFront RSA key pairs + key groups |
+| §5 | GitHub Actions OIDC provider |
+| §6 | GitHub Actions IAM deploy roles (dev + prod + build) |
+
+**Idempotency**: §3.7 checks SSM at `/duseum/{env}/stripe/platform_price_id` before calling Stripe — skips creation if the price ID already exists. All other sections use `--no-overwrite` or equivalent guard.
+
+**Input file**: Copy `scripts/.secrets.env.example` → `scripts/.secrets.env` and fill in Stripe keys and webhook secrets. The example file documents exactly what bootstrap creates so you know what is and is not your responsibility to supply.
+
 | Phase | What | Who | Time | External Wait |
 |---|---|---|---|---|
 | 0 | Accounts, domain, external services | 👤 Manual | 2–3 hrs | ⚠️ 1–5 days (Stripe) |
-| 1 | Terraform state + OIDC bootstrap | 🤖 CDK bootstrap | 15 min | — |
+| 0.5 | Run `bootstrap.sh` — provisions all external resources | 🤖 Script | 5–10 min | — |
+| 1 | CDK bootstrap (OIDC stack) | 🤖 CDK bootstrap | 15 min | — |
 | 2 | GitHub repo + secrets | 👤 Manual | 20 min | — |
-| 3 | First CDK deploy (dev) | 🤖 CI/CD | 20 min | — |
-| 4 | First app deploy (dev) | 🤖 CI/CD | 10 min | — |
+| 3 | First CDK deploy (dev) — gated by `_pre-deploy-check.yml` | 🤖 CI/CD | 20 min | — |
+| 4 | First app deploy (dev) — dep-check gates smoke tests | 🤖 CI/CD | 10 min | — |
 | 5 | Production go-live checklist | 👤 + 🤖 | 1–2 hrs | — |
 
 ### 11.2 Phase 0 — Accounts, Domain & External Services
@@ -2764,42 +2890,68 @@ GitHub → duseum repo → Settings:
 4. Environment secrets → prod: (sk_live_ — add only at go-live)
 ```
 
-### 11.5 Phase 3 — First CDK Deploy (Dev)
+### 11.5 Phase 0.5 — Run `bootstrap.sh` (Before First CDK Deploy)
+
+`bootstrap.sh` provisions all external resources that CDK depends on. Run this **before** the first CDK deploy and **before** pushing to `develop` (the `_pre-deploy-check.yml` job will fail if these prerequisites are missing).
 
 ```bash
-# Add Stripe secrets to Secrets Manager (dev account) before CDK deploy
-aws secretsmanager create-secret \
-  --name duseum/dev/stripe/secret-key \
-  --secret-string "sk_test_{your_key}" \
-  --profile duseum-dev
+# 1. Fill in Stripe keys + webhook secrets
+cp scripts/.secrets.env.example scripts/.secrets.env
+# Edit scripts/.secrets.env — add real Stripe keys for dev and prod
 
-aws secretsmanager create-secret \
-  --name duseum/dev/stripe/webhook-secret \
-  --secret-string "whsec_{your_secret}" \
-  --profile duseum-dev
+# 2. Log into AWS SSO
+aws sso login --profile rmw-llc
+
+# 3. Run bootstrap — provisions everything for both dev and prod
+bash scripts/bootstrap.sh
+```
+
+Bootstrap provisions (idempotent — safe to re-run):
+- Stripe secret/webhook keys → Secrets Manager (`duseum/{env}/stripe/*`)
+- Stripe publishable key → SSM (`/duseum/{env}/stripe/publishable_key`)
+- CI/CD artifact S3 bucket (`duseum-cicd-artifacts`)
+- DynamoDB config table static rows (`PLATFORM_CUT_PERCENT`, limits, slots)
+- Stripe platform subscription product + price → `PLATFORM_SUB_PRICE_ID` config row
+- CloudFront RSA key pairs + key groups
+- GitHub Actions OIDC provider
+- GitHub Actions IAM deploy roles
+
+Verify prerequisites after bootstrap:
+```bash
+# Confirm pre-deploy-check would pass
+bash scripts/pre-deploy-check.sh dev
+
+# Verify SSM stack outputs (written by CDK, not bootstrap)
+aws ssm get-parameters-by-path --path /duseum/dev/stacks/ \
+  --query 'Parameters[*].Name' --profile rmw-llc
 
 # Deploy all stacks to dev
 cd infrastructure
-npx cdk deploy --all --context env=dev --profile duseum-dev
-```
-
-Verify all SSM parameters written:
-```bash
-aws ssm get-parameters-by-path --path /duseum/dev/stacks/ \
-  --query 'Parameters[*].Name' --profile duseum-dev
+npx cdk deploy --all --context env=dev --profile rmw-llc
 ```
 
 ### 11.6 Phase 4 — First Application Deploy
 
 Push a commit to `develop`. The `deploy-dev.yml` workflow triggers automatically:
-1. CI checks pass
-2. Lambda ZIPs built and uploaded to S3 artifacts bucket
-3. CDK deploys all stacks (Lambda ZIPs referenced from S3)
-4. Smoke tests run
 
-Verify:
+1. CI checks pass
+2. Bootstrap Check (`_pre-deploy-check.yml`) runs **in parallel with Build** — verifies all bootstrap.sh outputs exist; fails fast with "run bootstrap.sh" message if anything is missing
+3. Lambda ZIPs built and uploaded to S3 artifacts bucket
+4. CDK deploys all stacks (Lambda ZIPs referenced from S3)
+5. Frontend deployed to S3 + CloudFront
+6. Dep Check (`_dep-check.yml`) runs — verifies config table seeded, secrets present, Stripe price active; distinguishes "table missing (CDK failed)" from "key missing (bootstrap gap)"
+7. Smoke tests run only if dep-check passes
+
+If dep-check fails, consult the job output:
+- "Config table not found" → CDK deploy may have failed; re-run CDK deploy
+- "Key missing: PLATFORM_SUB_PRICE_ID" → run `bash scripts/bootstrap.sh` (§3.7)
+- "Key is placeholder" → bootstrap §3.7 did not complete; re-run bootstrap
+
+Verify locally:
 ```bash
-SMOKE_ENV=dev bash scripts/smoke-test.sh dev
+bash scripts/pre-deploy-check.sh dev   # bootstrap prerequisites
+bash scripts/dep-check.sh dev          # runtime data (requires deployed CDK)
+bash scripts/smoke-test.sh dev $SHA   # end-to-end
 ```
 
 ### 11.7 Phase 5 — Production Go-Live Checklist
@@ -3383,19 +3535,70 @@ notifications-lambda/
 │   - Tampered token (bad HMAC) → 400 VALIDATION_ERROR
 ```
 
-### 15.4 Frontend Unit Tests
+### 15.4 Functional Testing Requirements (FR-TESTING)
 
-**Framework**: Vitest + React Testing Library
+These requirements are enforced by the spec gate in CLAUDE.md Section "Mandatory Process". A spec is not approved until every FR-TESTING requirement it touches is satisfied.
+
+| Code | Requirement | Enforcement |
+|---|---|---|
+| FR-TESTING-01 | Every Lambda route must have ≥1 integration test asserting status code, response shape, and primary error case | Spec gate — no new route ships without it |
+| FR-TESTING-02 | Routes with nested/wrapped response shapes must assert exact top-level key names (e.g. `{ profile, gallery }` unwrap) | Catches service mapping bugs before they reach prod |
+| FR-TESTING-03 | Every frontend service function that maps an API response must have a unit test for every field mapping, including renamed fields and defaults | `vi.mock('../api')` pattern in `frontend/src/services/__tests__/` |
+| FR-TESTING-04 | `checkArtPieceAccess()` must be unit-tested for all tier × visibility combinations (8 cases in Section 15.2) | Runs in `packages/shared` — no AWS dependencies |
+| FR-TESTING-05 | Every significant UI component must have component tests (React Testing Library) covering: all conditional rendering branches (access tier, subscription state, auth state), mutation calls when the user interacts, route guard redirects, and error states | Added when the component is first implemented; covers props-driven branches, hook interactions, and service calls |
+| FR-TESTING-06 | Every bug fix must be accompanied by a regression test that would have caught the bug before the fix | The test description must name the symptom (e.g. `followerCount.toLocaleString() crash`) |
+| FR-TESTING-07 | Webhook processing (Stripe events) must be integration-tested for idempotency: replaying the same eventId must produce no duplicate state change | MiniStack DynamoDB idempotency table check |
+
+**Test file locations** (authoritative):
 
 ```
-frontend/src/
-├── components/
-│   └── *.test.tsx           # Component render + interaction tests
-└── hooks/
-    └── use-artworks.test.ts # React Query hook tests (MSW for API mocking)
+packages/shared/src/__tests__/                          # FR-TESTING-04 + unit
+lambdas/{name}/src/__tests__/*.integration.test.ts      # FR-TESTING-01/02/07
+frontend/src/services/__tests__/*.service.test.ts       # FR-TESTING-03
+frontend/src/components/__tests__/*.test.tsx            # FR-TESTING-05
 ```
 
-### 15.5 E2E Tests — Playwright
+**Coverage targets** (enforced in CI):
+
+| Layer | Target | Tool |
+|---|---|---|
+| `packages/shared` | 80% line coverage | Vitest `--coverage` |
+| Lambda routes | 100% of routes have ≥1 integration test | Manual audit via `specs/testing/test-coverage.md` |
+| Frontend services | 100% of service files have a unit test | Manual audit via `specs/testing/test-coverage.md` |
+| Frontend components (significant) | 100% rendering branches + mutation interactions | React Testing Library |
+
+### 15.5 Frontend Tests
+
+**Three sub-layers — all run via `npm test` in the `frontend/` workspace:**
+
+| Sub-layer | Framework | Location | FR code |
+|---|---|---|---|
+| Service unit tests | Vitest + `vi.mock` | `src/services/__tests__/*.service.test.ts` | FR-TESTING-03 |
+| Component tests | Vitest + React Testing Library | `src/components/__tests__/*.test.tsx` | FR-TESTING-05 |
+| Hook tests | Vitest + MSW (future) | `src/hooks/*.test.ts` | FR-TESTING-03 |
+
+**Shared test utilities** (`src/test/`):
+- `setup.ts` — imports `@testing-library/jest-dom`; patches `window.location` to silence jsdom navigation warnings
+- `test-utils.tsx` — exports a custom `render()` pre-wrapped in `QueryClientProvider` (retry disabled) + `MemoryRouter`
+
+**Component test pattern**:
+```tsx
+// Wrap components that use React Query or React Router:
+import { render } from '../../test/test-utils'
+// Provide full route context (for components with Navigate redirects):
+import { render as rtlRender } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+// Mock Zustand stores and service modules at module scope via vi.mock
+```
+
+**What component tests must cover** (per FR-TESTING-05):
+1. All conditional rendering branches (access tier, subscription status, auth state, loading)
+2. Mutation calls triggered by user interaction (click → service method called)
+3. Unauthenticated redirect path (navigate to `/login`)
+4. Error state rendering (error message shown after failed mutation)
+5. Route guard redirects (ProtectedRoute, AdminRoute)
+
+### 15.6 E2E Tests — Playwright
 
 **Scope**: Critical user flows only. Full stack runs locally via MiniStack + local Lambda dev server (`npm run dev:lambdas`). Stripe test mode used with test card numbers.
 
@@ -3465,7 +3668,7 @@ e2e/
 8. Viewer loads signed URL → image renders
 ```
 
-### 15.6 CI Test Execution Order
+### 15.7 CI Test Execution Order
 
 ```
 1. lint + typecheck (all workspaces, parallel)
@@ -3480,7 +3683,7 @@ e2e/
 
 **Parallelism**: Steps 1–4 run in parallel. Steps 5–7 sequential. Step 8 only on PRs targeting `develop` or `main`.
 
-### 15.7 Test Data Strategy
+### 15.8 Test Data Strategy
 
 - **Unit tests**: inline test data (factory functions in `packages/shared/src/__tests__/factories.ts`)
 - **Integration tests**: `beforeEach` seeds minimal DynamoDB records; `afterEach` truncates. Tests are independent — any order.

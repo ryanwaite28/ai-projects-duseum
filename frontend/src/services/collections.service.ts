@@ -4,7 +4,7 @@ import type { AuthorCollection } from '../types/artwork'
 export interface CollectionBody {
   title:        string
   description?: string
-  visibility:   'PUBLIC' | 'PRIVATE'
+  visibility:   'FREE' | 'SUBSCRIBER_ONLY'
 }
 
 export interface CollectionPiece {
