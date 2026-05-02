@@ -10,12 +10,15 @@
 #
 #   Production AWS (default):
 #     Provisions real AWS account resources that CDK cannot create itself.
-#       1. Secrets Manager — all runtime secrets (dev + prod)
-#       2. SSM Parameter Store — non-secret config values (dev + prod)
-#       3. CloudFront RSA key pairs — for signed URLs (dev + prod)
-#       4. CloudFront key groups — referencing the key pairs
-#       5. GitHub Actions OIDC provider
-#       6. GitHub Actions IAM deploy roles
+#       1.   Secrets Manager — all runtime secrets (dev + prod)
+#       2.   Secrets Manager — PROD runtime secrets
+#       3.   SSM Parameter Store — Stripe publishable keys (non-secret)
+#       3.5  CI/CD artifact bucket — duseum-cicd-artifacts (shared)
+#       3.6  DynamoDB config table seeding — all required keys (dev + prod)
+#       3.7  Stripe platform subscription product + price (dev + prod, idempotent)
+#       4.   CloudFront RSA key pairs + key groups — for signed URLs (dev + prod)
+#       5.   GitHub Actions OIDC provider
+#       6.   GitHub Actions IAM deploy roles
 #
 #   Local dev / MiniStack (--local flag):
 #     Provisions a complete local-AWS environment in MiniStack that mirrors
@@ -1137,6 +1140,141 @@ success "  Tags applied (Environment=shared)"
 # Store bucket name in SSM — authoritative reference for CDK stacks and scripts
 put_ssm "/duseum/cicd/artifact_bucket_name" "$CICD_BUCKET" "shared"
 success "  SSM: /duseum/cicd/artifact_bucket_name = ${CICD_BUCKET}"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 3.6 — DynamoDB config table seeding (dev + prod)
+#
+# CDK creates the config table but does NOT seed it. These keys must exist for
+# features to work after first deploy. Idempotent — put-item overwrites safely.
+#
+# PLATFORM_SUB_PRICE_ID is seeded by Section 3.7 after the Stripe price is
+# provisioned (or provided via DEV/PROD_STRIPE_PRICE_ID env var override).
+# All other keys have static values seeded here.
+#
+# Local MiniStack equivalent: Section 8 (--local mode only).
+# Sync rule: when adding a new config key, update here AND dep-check.sh
+# REQUIRED_KEYS AND specs/infrastructure/environment-bootstrap.md.
+# ═══════════════════════════════════════════════════════════════════════════════
+seed_config_table() {
+  local env="$1" price_id="${2:-REPLACE_WITH_STRIPE_PRICE_ID}"
+  local table="duseum-${env}-dynamodb-config"
+
+  step "DynamoDB config table seeding — ${env} (${table})"
+
+  # PLATFORM_SUB_PRICE_ID: seeded with real price after Section 3.7,
+  # or placeholder if Stripe provisioning hasn't run yet.
+  aws_cmd dynamodb put-item --table-name "$table" \
+    --item "{\"PK\":{\"S\":\"PLATFORM_SUB_PRICE_ID\"},\"value\":{\"S\":\"${price_id}\"}}" \
+    --output text >/dev/null
+  if [[ "$price_id" == "REPLACE_WITH_STRIPE_PRICE_ID" ]]; then
+    warn "  PLATFORM_SUB_PRICE_ID — placeholder (Section 3.7 will update this)"
+  else
+    success "  PLATFORM_SUB_PRICE_ID = ${price_id}"
+  fi
+
+  aws_cmd dynamodb put-item --table-name "$table" \
+    --item '{"PK":{"S":"PLATFORM_CUT_PERCENT"},"value":{"N":"20"}}' --output text >/dev/null
+  success "  PLATFORM_CUT_PERCENT = 20"
+
+  aws_cmd dynamodb put-item --table-name "$table" \
+    --item '{"PK":{"S":"FREE_TIER_LIMIT"},"value":{"N":"5"}}' --output text >/dev/null
+  success "  FREE_TIER_LIMIT = 5"
+
+  aws_cmd dynamodb put-item --table-name "$table" \
+    --item '{"PK":{"S":"WEEKLY_FEATURE_FEE_USD"},"value":{"N":"50"}}' --output text >/dev/null
+  success "  WEEKLY_FEATURE_FEE_USD = 50"
+
+  aws_cmd dynamodb put-item --table-name "$table" \
+    --item '{"PK":{"S":"WEEKLY_FEATURE_SLOT_COUNT"},"value":{"N":"3"}}' --output text >/dev/null
+  success "  WEEKLY_FEATURE_SLOT_COUNT = 3"
+
+  aws_cmd dynamodb put-item --table-name "$table" \
+    --item '{"PK":{"S":"WEEKLY_FEATURE_ADVANCE_WEEKS"},"value":{"N":"3"}}' --output text >/dev/null
+  success "  WEEKLY_FEATURE_ADVANCE_WEEKS = 3"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 3.7 — Stripe platform subscription product + price (dev + prod)
+#
+# Creates the Stripe Product and recurring Price used for platform subscriptions.
+# The resulting price ID is stored in SSM (idempotency key for future re-runs)
+# and seeded into the DynamoDB config table as PLATFORM_SUB_PRICE_ID.
+#
+# Idempotency: SSM key /duseum/{env}/stripe/platform_price_id is checked first.
+# If present, creation is skipped and the existing price ID is used to re-seed
+# the config table (safe to re-run if config table was cleared).
+#
+# Override: set DEV_STRIPE_PRICE_ID / PROD_STRIPE_PRICE_ID in .secrets.env to
+# use an existing price instead of creating a new one (e.g., after key rotation
+# or when the price was created outside this script).
+# ═══════════════════════════════════════════════════════════════════════════════
+provision_stripe_platform_price() {
+  local env="$1" stripe_key="$2" price_id_override="${3:-}"
+  local ssm_price_id="/duseum/${env}/stripe/platform_price_id"
+  local table="duseum-${env}-dynamodb-config"
+
+  step "Stripe platform subscription product + price — ${env}"
+
+  # 1. Override provided: use it directly, skip Stripe API call
+  if [[ -n "$price_id_override" ]]; then
+    info "  Using provided price ID override: ${price_id_override}"
+    put_ssm "$ssm_price_id" "$price_id_override" "$env"
+    seed_config_table "$env" "$price_id_override"
+    return
+  fi
+
+  # 2. Already provisioned: SSM has the price ID from a previous run
+  if ssm_param_exists "$ssm_price_id"; then
+    local existing_price
+    existing_price=$(get_ssm "$ssm_price_id")
+    success "  Stripe price already provisioned for ${env}: ${existing_price} (skipping creation)"
+    # Re-seed config table in case it was cleared since last run
+    seed_config_table "$env" "$existing_price"
+    return
+  fi
+
+  # 3. First-time provisioning: create Stripe product + price
+  info "  Creating Stripe product for ${env}..."
+  PRODUCT_RESP=$(curl -sf -X POST "https://api.stripe.com/v1/products" \
+    -u "${stripe_key}:" \
+    -d "name=Platform Subscription" \
+    -d "description=Duseum platform membership — unlimited access to all artworks" \
+    2>/dev/null)
+  if [[ -z "$PRODUCT_RESP" ]]; then
+    echo -e "${RED}ERROR: Stripe product creation failed for ${env} — check stripe key in .secrets.env${NC}" >&2
+    exit 1
+  fi
+  PRODUCT_ID=$(echo "$PRODUCT_RESP" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+  success "  Product: ${PRODUCT_ID}"
+
+  info "  Creating Stripe price (\$10.00 USD/month) for ${env}..."
+  PRICE_RESP=$(curl -sf -X POST "https://api.stripe.com/v1/prices" \
+    -u "${stripe_key}:" \
+    -d "product=${PRODUCT_ID}" \
+    -d "unit_amount=1000" \
+    -d "currency=usd" \
+    -d "recurring[interval]=month" \
+    2>/dev/null)
+  if [[ -z "$PRICE_RESP" ]]; then
+    echo -e "${RED}ERROR: Stripe price creation failed for ${env}${NC}" >&2
+    exit 1
+  fi
+  PRICE_ID=$(echo "$PRICE_RESP" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+  success "  Price: ${PRICE_ID} (\$10.00/month)"
+
+  # 4. Store in SSM — idempotency key for future re-runs
+  put_ssm "$ssm_price_id" "$PRICE_ID" "$env"
+
+  # 5. Seed config table with the real price ID
+  seed_config_table "$env" "$PRICE_ID"
+}
+
+# Run Section 3.6 static keys first (placeholder for price), then Section 3.7
+# which overwrites PLATFORM_SUB_PRICE_ID with the real provisioned price.
+# DEV_STRIPE_PRICE_ID / PROD_STRIPE_PRICE_ID are optional override vars from
+# .secrets.env — leave blank on first run; set on re-runs to skip Stripe API.
+provision_stripe_platform_price "dev"  "$DEV_STRIPE_SK"  "${DEV_STRIPE_PRICE_ID:-}"
+provision_stripe_platform_price "prod" "$PROD_STRIPE_SK" "${PROD_STRIPE_PRICE_ID:-}"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 4 — CloudFront RSA key pairs + key groups (for signed URLs)

@@ -18,6 +18,7 @@ jobs:
     secrets: inherit
 
   # ── Build Lambda ZIPs and upload to S3 artifact bucket ──────────────────────
+  # Runs in PARALLEL with pre-deploy-check — both need only [ci].
   build:
     name: Build
     needs: [ci]
@@ -29,12 +30,25 @@ jobs:
     secrets:
       AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_BUILD }}
 
+  # ── Bootstrap prerequisites check (parallel with Build) ──────────────────────
+  # Verifies bootstrap.sh outputs exist before CDK deploy runs.
+  # Saves the full CDK deploy time (~15 min) when bootstrap.sh was not run.
+  pre-deploy-check:
+    name: Bootstrap Check (prod)
+    needs: [ci]
+    uses: ./.github/workflows/_pre-deploy-check.yml
+    with:
+      environment: prod
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+
   # ── Deploy all CDK stacks to prod ────────────────────────────────────────────
+  # Gates on both build AND pre-deploy-check — both must pass.
   # The "prod" GitHub Environment requires manual approval before this job runs.
   # Configure required reviewers in: Settings → Environments → prod.
   deploy-prod:
     name: Deploy (prod)
-    needs: [build]
+    needs: [build, pre-deploy-check]
     uses: ./.github/workflows/_cdk-deploy.yml
     with:
       environment: prod
@@ -53,10 +67,22 @@ jobs:
     secrets:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
 
+  # ── Runtime dependency check — gates smoke tests ──────────────────────────────
+  # Verifies config table seeded, secrets present, Stripe price active.
+  # Smart: distinguishes table-missing (CDK failed) vs key-missing (bootstrap gap).
+  dep-check:
+    name: Dependency Check (prod)
+    needs: [deploy-frontend]
+    uses: ./.github/workflows/_dep-check.yml
+    with:
+      environment: prod
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+
   # ── Post-deploy smoke tests ───────────────────────────────────────────────────
   smoke-test:
     name: Smoke Test (prod)
-    needs: [deploy-frontend]
+    needs: [dep-check]
     runs-on: ubuntu-latest
     environment: prod
     permissions:

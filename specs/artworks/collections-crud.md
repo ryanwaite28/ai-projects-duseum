@@ -30,11 +30,11 @@
 - Reverse membership (piece → collections): `PK=ART#{pieceId}, SK=COLLECTION#{collectionId}`
 
 **Business logic**:
-1. `POST /collections` — body: `{ title, description?, visibility: 'PUBLIC'|'PRIVATE', coverPieceId? }`:
+1. `POST /collections` — body: `{ title, description?, visibility: 'FREE'|'SUBSCRIBER_ONLY', coverPieceId? }`:
    - Must be authenticated Author; `coverPieceId` must belong to same Author
 2. `GET /collections/{collectionId}`:
-   - PUBLIC collection: visible to all
-   - PRIVATE collection: Author (own) or Author Subscriber only
+   - FREE collection: visible to all
+   - SUBSCRIBER_ONLY collection: Author (own) or Author Subscriber only
    - `totalPieces` count = all pieces in collection; `accessiblePieces` = pieces visible to requesting viewer (respects `checkArtPieceAccess()`)
    - FR-COL-06: return both counts so frontend can show "12 pieces — 4 visible to you"
 3. `PUT /collections/{collectionId}` — update title, description, visibility, coverPieceId, pieceOrder (array of pieceIds)
@@ -42,7 +42,7 @@
 5. A piece can belong to multiple collections (many-to-many via membership records)
 
 **Error conditions**:
-- PRIVATE collection access by non-subscriber → 403
+- SUBSCRIBER_ONLY collection access by non-subscriber → 403
 - `coverPieceId` not owned by authenticated Author → 400
 - Update/delete collection owned by another Author → 403
 

@@ -1,0 +1,41 @@
+name: Bootstrap Prerequisites Check (reusable)
+
+# Verifies that all resources bootstrap.sh creates exist before CDK deploy runs.
+# Runs in PARALLEL with _build-lambdas.yml — adds zero wall-clock time when
+# passing; saves the full CDK deploy time when failing.
+#
+# Called by deploy-dev.yml and deploy-prod.yml with needs: [ci], same as build.
+# The deploy job gates on both: needs: [build, pre-deploy-check].
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: Target environment — dev or prod
+    secrets:
+      AWS_ROLE_ARN:
+        required: true
+        description: IAM role ARN to assume via OIDC for this environment
+
+jobs:
+  pre-deploy-check:
+    name: Bootstrap Check (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Run bootstrap prerequisites check
+        run: bash scripts/pre-deploy-check.sh ${{ inputs.environment }}

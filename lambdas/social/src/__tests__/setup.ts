@@ -99,6 +99,17 @@ export const makeCtx = () => ({
   getRemainingTimeInMillis: () => 30_000,
 }) as never
 
+/** Seeds a minimal UserAccount item so authorDisplayName can be resolved by list-comments. */
+export const seedUserAccount = (userId: string, displayName: string) =>
+  seedItem({
+    PK:          `USER#${userId}`,
+    SK:          'PROFILE',
+    userId,
+    displayName,
+    email:       `${userId}@test.com`,
+    createdAt:   new Date().toISOString(),
+  })
+
 /** Seeds a minimal artwork METADATA item with given options. */
 export const seedArtwork = (
   artworkId: string,

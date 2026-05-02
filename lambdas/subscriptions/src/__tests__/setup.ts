@@ -45,8 +45,20 @@ beforeAll(async () => {
         { AttributeName: 'SK', KeyType: 'RANGE' },
       ],
       AttributeDefinitions: [
-        { AttributeName: 'PK', AttributeType: 'S' },
-        { AttributeName: 'SK', AttributeType: 'S' },
+        { AttributeName: 'PK',       AttributeType: 'S' },
+        { AttributeName: 'SK',       AttributeType: 'S' },
+        { AttributeName: 'authorId', AttributeType: 'S' },
+        { AttributeName: 'createdAt', AttributeType: 'S' },
+      ],
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: 'GSI-SubscribersByAuthor',
+          KeySchema: [
+            { AttributeName: 'authorId',  KeyType: 'HASH' },
+            { AttributeName: 'createdAt', KeyType: 'RANGE' },
+          ],
+          Projection: { ProjectionType: 'ALL' },
+        },
       ],
       BillingMode: 'PAY_PER_REQUEST',
     }))
@@ -54,17 +66,15 @@ beforeAll(async () => {
     if (!(err instanceof ResourceInUseException)) throw err
   }
 
-  // Create config table (PK-only — single-key design used by config items)
+  // Create config table — PK-only, matching production StorageStack (no SK)
   try {
     await dynamo.send(new CreateTableCommand({
       TableName: CONFIG_TABLE,
       KeySchema: [
         { AttributeName: 'PK', KeyType: 'HASH' },
-        { AttributeName: 'SK', KeyType: 'RANGE' },
       ],
       AttributeDefinitions: [
         { AttributeName: 'PK', AttributeType: 'S' },
-        { AttributeName: 'SK', AttributeType: 'S' },
       ],
       BillingMode: 'PAY_PER_REQUEST',
     }))
@@ -72,15 +82,15 @@ beforeAll(async () => {
     if (!(err instanceof ResourceInUseException)) throw err
   }
 
-  // Seed platform price config
+  // Seed platform config — { PK: key, value } matching setConfigValue / getConfigValue pattern
   await docClient.send(new PutCommand({
     TableName: CONFIG_TABLE,
-    Item: { PK: 'CONFIG', SK: 'PLATFORM_SUB_PRICE_ID', value: 'price_platform_test_123' },
+    Item: { PK: 'PLATFORM_SUB_PRICE_ID', value: 'price_platform_test_123' },
   }))
 
   await docClient.send(new PutCommand({
     TableName: CONFIG_TABLE,
-    Item: { PK: 'CONFIG', SK: 'PLATFORM_CUT_PERCENT', value: '20' },
+    Item: { PK: 'PLATFORM_CUT_PERCENT', value: 20 },
   }))
 })
 

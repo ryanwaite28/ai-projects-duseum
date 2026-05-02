@@ -168,7 +168,9 @@ describe('GET /subscriptions/me', () => {
 })
 
 describe('POST /subscriptions/platform', () => {
-  it('returns checkoutUrl when no existing subscription', async () => {
+  // FR-TESTING-06: regression — getConfigValue used wrong key { PK:'CONFIG', SK:key } while
+  // setConfigValue writes { PK:key }. PLATFORM_SUB_PRICE_ID was never found → 400.
+  it('returns checkoutUrl when PLATFORM_SUB_PRICE_ID is seeded with PK-only key', async () => {
     await seedUserAccount()
 
     const event = makeEvent('POST', '/subscriptions/platform', { userId: USER_ID })
@@ -465,5 +467,103 @@ describe('POST /users/me/author/subscription-price', () => {
     })
     const result = await handler(event as never, makeCtx())
     expect(result.statusCode).toBe(404)
+  })
+})
+
+// ── GET /subscriptions/me/subscribers ────────────────────────────────────────
+
+describe('GET /subscriptions/me/subscribers', () => {
+  const AUTHOR_ID = 'author-subs-001'
+  const SUB_USER_1 = 'subscriber-001'
+  const SUB_USER_2 = 'subscriber-002'
+
+  const seedAuthorProfile = (userId = AUTHOR_ID, overrides: Record<string, unknown> = {}) =>
+    seedItem({
+      PK: `USER#${userId}`, SK: 'PROFILE#AUTHOR',
+      userId, profileType: 'AUTHOR', status: 'ACTIVE',
+      displayName: 'Subs Author', bio: '',
+      profilePhotoS3Key: null, coverPhotoS3Key: null,
+      stripeConnectAccountId: null,
+      authorSubscriptionPriceId: null,
+      authorSubscriptionMonthlyUsd: null,
+      featuredPieceIds: [],
+      createdAt: '2025-01-01T00:00:00.000Z',
+      totalPiecesCount: 0, followerCount: 0, subscriberCount: 2,
+      ...overrides,
+    })
+
+  const seedAuthorSub = (
+    subscriberUserId: string,
+    authorId: string,
+    overrides: Record<string, unknown> = {}
+  ) =>
+    seedItem({
+      PK: `USER#${subscriberUserId}`,
+      SK: `SUB#AUTHOR#${authorId}`,
+      userId:               subscriberUserId,
+      authorId,
+      stripeSubscriptionId: `sub_test_${subscriberUserId}`,
+      stripeCustomerId:     `cus_test_${subscriberUserId}`,
+      status:               'ACTIVE',
+      currentPeriodEnd:     '2026-01-01T00:00:00.000Z',
+      createdAt:            '2025-01-01T00:00:00.000Z',
+      ...overrides,
+    })
+
+  it('returns items and total when Author has subscribers', async () => {
+    await seedAuthorProfile()
+    await seedAuthorSub(SUB_USER_1, AUTHOR_ID)
+    await seedAuthorSub(SUB_USER_2, AUTHOR_ID)
+
+    const event = makeEvent('GET', '/subscriptions/me/subscribers', { userId: AUTHOR_ID })
+    const result = await handler(event as never, makeCtx())
+    expect(result.statusCode).toBe(200)
+
+    const body = JSON.parse(result.body as string)
+    expect(Array.isArray(body.items)).toBe(true)
+    expect(body.items.length).toBe(2)
+    expect(typeof body.total).toBe('number')
+    expect(body.nextCursor).toBeNull()
+  })
+
+  it('response shape: items contain userId, stripeSubscriptionId, status, currentPeriodEnd, createdAt', async () => {
+    await seedAuthorProfile()
+    await seedAuthorSub(SUB_USER_1, AUTHOR_ID)
+
+    const event = makeEvent('GET', '/subscriptions/me/subscribers', { userId: AUTHOR_ID })
+    const result = await handler(event as never, makeCtx())
+    expect(result.statusCode).toBe(200)
+
+    const body = JSON.parse(result.body as string)
+    const sub = body.items[0]
+    expect(sub).toHaveProperty('userId')
+    expect(sub).toHaveProperty('stripeSubscriptionId')
+    expect(sub).toHaveProperty('status')
+    expect(sub).toHaveProperty('currentPeriodEnd')
+    expect(sub).toHaveProperty('createdAt')
+  })
+
+  it('returns empty items when Author has no subscribers', async () => {
+    await seedAuthorProfile(AUTHOR_ID, { subscriberCount: 0 })
+
+    const event = makeEvent('GET', '/subscriptions/me/subscribers', { userId: AUTHOR_ID })
+    const result = await handler(event as never, makeCtx())
+    expect(result.statusCode).toBe(200)
+
+    const body = JSON.parse(result.body as string)
+    expect(body.items).toHaveLength(0)
+    expect(body.nextCursor).toBeNull()
+  })
+
+  it('returns 403 when caller has no Author profile', async () => {
+    const event = makeEvent('GET', '/subscriptions/me/subscribers', { userId: 'viewer-only-user' })
+    const result = await handler(event as never, makeCtx())
+    expect(result.statusCode).toBe(403)
+  })
+
+  it('returns 401 when no JWT provided', async () => {
+    const event = makeEvent('GET', '/subscriptions/me/subscribers')
+    const result = await handler(event as never, makeCtx())
+    expect(result.statusCode).toBe(401)
   })
 })

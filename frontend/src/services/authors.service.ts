@@ -1,6 +1,8 @@
 import { api } from './api'
 import type { AuthorProfile, ArtworkListItem, AuthorCollection } from '../types/artwork'
 
+type GalleryItem = Pick<ArtworkListItem, 'artworkId' | 'title' | 'category' | 'tags' | 'thumbnailUrl' | 'viewCount' | 'publishedAt'>
+
 type GetAuthorApiResponse = {
   profile: {
     authorId:                     string
@@ -16,7 +18,7 @@ type GetAuthorApiResponse = {
     createdAt:                    string
   }
   gallery: {
-    items:      ArtworkListItem[]
+    items:      GalleryItem[]
     nextCursor: string | null
   }
 }
@@ -32,7 +34,14 @@ export const getAuthor = (authorId: string): Promise<AuthorProfile> =>
     subscriberCount:            profile.subscriberCount,
     authorSubscriptionPriceUsd: profile.authorSubscriptionMonthlyUsd,
     connectChargesEnabled:      profile.connectChargesEnabled,
-    recentPieces:               gallery.items,
+    recentPieces:               gallery.items.map(item => ({
+      ...item,
+      authorId:          profile.authorId,
+      authorDisplayName: profile.displayName,
+      accessTier:        'PUBLIC' as const,
+      reactionCounts:    {},
+      commentCount:      0,
+    })),
     status:                     'ACTIVE' as const,
   }))
 
