@@ -322,6 +322,116 @@ describe('GET /authors', () => {
   })
 })
 
+describe('GET /authors/{authorId}', () => {
+
+  const seedPublicPiece = (artworkId: string, authorId: string, createdAt: string) =>
+    seedItem({
+      PK: `ARTWORK#${artworkId}`,
+      SK: 'ARTWORK',
+      artworkId,
+      authorId,
+      title:       `Piece ${artworkId}`,
+      category:    'DIGITAL',
+      tags:        ['test'],
+      visibility:  'PUBLIC',
+      status:      'ACTIVE',
+      s3Key:       `media/${artworkId}.jpg`,
+      viewCount:   10,
+      publishedAt: createdAt,
+      createdAt,
+      'visibility#createdAt': `PUBLIC#${createdAt}`,
+    })
+
+  const seedPrivatePiece = (artworkId: string, authorId: string, createdAt: string) =>
+    seedItem({
+      PK: `ARTWORK#${artworkId}`,
+      SK: 'ARTWORK',
+      artworkId,
+      authorId,
+      title:       `Private ${artworkId}`,
+      category:    'DIGITAL',
+      tags:        [],
+      visibility:  'PRIVATE',
+      status:      'ACTIVE',
+      s3Key:       `media/${artworkId}.jpg`,
+      viewCount:   0,
+      publishedAt: createdAt,
+      createdAt,
+      'visibility#createdAt': `PRIVATE#${createdAt}`,
+    })
+
+  it('returns { profile, gallery } shape with correct field names', async () => {
+    await seedAuthorProfile(AUTHOR_ID, {
+      followerCount:                42,
+      subscriberCount:              5,
+      authorSubscriptionMonthlyUsd: 9.99,
+      connectChargesEnabled:        true,
+    })
+    await seedPublicPiece('art-001', AUTHOR_ID, '2025-03-01T00:00:00.000Z')
+
+    const event = makeEvent('GET', `/authors/${AUTHOR_ID}`, {
+      pathParameters: { authorId: AUTHOR_ID },
+    })
+    const res = await handler(event as never, makeCtx())
+    expect(res.statusCode).toBe(200)
+
+    const body = JSON.parse(res.body!)
+
+    // Top-level shape must be { profile, gallery }
+    expect(body.profile).toBeDefined()
+    expect(body.gallery).toBeDefined()
+    // Profile field names exactly as documented in Section 8.5
+    expect(body.profile.authorId).toBe(AUTHOR_ID)
+    expect(body.profile.displayName).toBe('Test Author')
+    expect(body.profile.followerCount).toBe(42)
+    expect(body.profile.subscriberCount).toBe(5)
+    expect(body.profile.authorSubscriptionMonthlyUsd).toBe(9.99)
+    expect(body.profile.connectChargesEnabled).toBe(true)
+    expect(body.profile.profilePhotoUrl).toBeNull()
+    expect(body.profile.coverPhotoUrl).toBeNull()
+    // Gallery shape
+    expect(body.gallery.items).toHaveLength(1)
+    expect(body.gallery.items[0].artworkId).toBe('art-001')
+    expect(body.gallery.items[0].title).toBe('Piece art-001')
+    expect(body.gallery.items[0].thumbnailUrl).toContain('art-001.jpg')
+    expect(body.gallery.items[0].viewCount).toBe(10)
+  })
+
+  it('gallery items contain only PUBLIC pieces', async () => {
+    await seedAuthorProfile(AUTHOR_ID)
+    await seedPublicPiece('art-pub',  AUTHOR_ID, '2025-03-02T00:00:00.000Z')
+    await seedPrivatePiece('art-priv', AUTHOR_ID, '2025-03-01T00:00:00.000Z')
+
+    const event = makeEvent('GET', `/authors/${AUTHOR_ID}`, {
+      pathParameters: { authorId: AUTHOR_ID },
+    })
+    const res = await handler(event as never, makeCtx())
+    expect(res.statusCode).toBe(200)
+
+    const body = JSON.parse(res.body!)
+    expect(body.gallery.items).toHaveLength(1)
+    expect(body.gallery.items[0].artworkId).toBe('art-pub')
+  })
+
+  it('returns 404 for non-existent author', async () => {
+    const event = makeEvent('GET', '/authors/no-such-author', {
+      pathParameters: { authorId: 'no-such-author' },
+    })
+    const res = await handler(event as never, makeCtx())
+    expect(res.statusCode).toBe(404)
+  })
+
+  it('returns 404 for a SUSPENDED author', async () => {
+    await seedAuthorProfile(AUTHOR_ID, { status: 'SUSPENDED' })
+
+    const event = makeEvent('GET', `/authors/${AUTHOR_ID}`, {
+      pathParameters: { authorId: AUTHOR_ID },
+    })
+    const res = await handler(event as never, makeCtx())
+    expect(res.statusCode).toBe(404)
+  })
+})
+
 describe('GET /users/{userId}/profile', () => {
 
   it('returns public Author profile with gallery preview', async () => {

@@ -336,6 +336,20 @@ Both Stripe account IDs, both Connect Client IDs, all four webhook destination I
 
 Using `{env}` prefix on every resource name (`duseum-dev-dynamodb-main`, `duseum-prod-dynamodb-main`) to isolate dev and prod within the same AWS account worked cleanly. The CDK note about running bootstrap sequentially (dev first, then prod) was important — parallel bootstrap runs on the same account failed with resource conflicts.
 
+### 9. Tests are not optional — they are the proof that implementation is correct
+
+The project had strong backend integration tests (Vitest + MiniStack, real DynamoDB) but two significant gaps:
+
+1. **`GET /authors/{authorId}` had zero integration tests.** The backend returns `{ profile: {...}, gallery: {...} }` — a two-key wrapper — but the frontend service was written to treat the response as a flat `AuthorProfile`. This went undetected for the entire development period because no test ever asserted the response shape. The bug only surfaced as a runtime crash in the browser (`followerCount.toLocaleString()` on `undefined`).
+
+2. **The frontend had no test infrastructure at all** — no vitest, no `@testing-library/react`, no `test` script in `package.json`. Service-layer mapping functions (`getAuthor`, `getAuthorCollections`) were never unit-tested, so field-name mismatches and shape-wrapping bugs were invisible until the page crashed.
+
+**The pattern that would have prevented both crashes:**
+- Every new Lambda route needs an integration test that asserts the exact response shape (not just the status code)
+- Every frontend service function that maps an API response needs a unit test that feeds in a mock API response and asserts the mapped output field by field
+
+**The rule encoded in CLAUDE.md as of this project:** Step 6 of the mandatory process is now "Write or update tests." A spec is not done until tests exist and pass.
+
 ---
 
 ## Process: Ordered Steps for an AI-Driven Project from Scratch
@@ -398,6 +412,8 @@ Based on this project, the recommended sequence for a future production-grade AI
 5. **One PR per spec.** The 13-PRs-in-one-day pattern made git history hard to read. One spec = one branch = one PR keeps history auditable.
 
 6. **Require the spec step even for test failures.** A CI failure is not a shortcut around the process — it is the scenario where the process matters most. The correct side to fix (implementation vs. test) cannot be determined without first reading PROJECT.md and the spec. Encode this explicitly in CLAUDE.md from the start, not as an afterthought.
+
+7. **Bootstrap frontend test infrastructure on day 1.** The frontend had no test runner, no `@testing-library/react`, and no `test` script in `package.json` for the entire project. Adding it after-the-fact required retrofitting. If `vitest` + `@testing-library/react` had been wired up in the initial scaffold, service-layer unit tests would have been written alongside every feature spec.
 
 ---
 

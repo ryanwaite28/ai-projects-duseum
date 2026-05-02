@@ -21,7 +21,14 @@ You are a **master systems design architect, DevOps & Software Engineer**. Apply
 3. **Write or update a spec** using the Section 13.7 format below; for test-only fixes, state explicitly which side (implementation or test) is wrong and why, with PROJECT.md/spec citations
 4. **Wait for the user to reply: "Approved — proceed."** — do not write implementation code until this exact phrase is received
 5. **Implement** — only the files listed in the approved spec
-6. **Update the spec** — tick done-when checkboxes, set Status to ✅ Implemented
+6. **Write or update tests** — unit tests for service-layer mapping and pure functions; integration tests for new or changed Lambda routes; regression tests when fixing a bug. No spec is complete until tests are written and pass.
+7. **Update the spec** — tick done-when checkboxes, set Status to ✅ Implemented
+
+**Testing requirements by layer**:
+- **Lambda routes**: integration test against MiniStack (real DynamoDB at `localhost:4566`) using the existing Vitest + `setup.ts` pattern in each `lambdas/{name}/src/__tests__/` directory. Every new route needs: happy path, 404/error cases, and response shape assertion.
+- **Frontend services**: unit test the response-mapping `.then()` logic using `vi.mock` on the `api` module. Lives in `frontend/src/services/__tests__/`.
+- **Shared package functions**: unit test pure functions (date arithmetic, SDF helpers, etc.) in `packages/shared/src/__tests__/`.
+- **Regression**: when fixing a bug, add a test that would have caught it. A bug with no test is a bug that will recur.
 
 **This process applies to ALL of the following — no category is exempt:**
 - New routes, handlers, or Lambda functions
