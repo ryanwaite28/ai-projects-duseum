@@ -223,14 +223,21 @@ export const listBookingsByStatusAndWeek = async (
   featureStatus: WeeklyFeatureBooking['featureStatus'],
   isoWeek: string
 ): Promise<WeeklyFeatureBooking[]> => {
+  // Both the week-keyed record (PK=FEATURE#WEEK#{week}) and the author-keyed
+  // reverse-lookup record (PK=AUTHOR#{authorId}) carry featureStatus + isoWeek
+  // as top-level GSI attributes, so without a filter the index returns 2× per
+  // booking. Restrict to week-keyed records only — the same approach used in
+  // countActiveBookingsForWeek.
   const result = await client.send(
     new QueryCommand({
       TableName: TABLE_NAME,
       IndexName: 'GSI-WeeklyFeatureByStatus',
       KeyConditionExpression: 'featureStatus = :status AND isoWeek = :week',
+      FilterExpression:       'begins_with(PK, :pkPrefix)',
       ExpressionAttributeValues: {
-        ':status': featureStatus,
-        ':week':   isoWeek,
+        ':status':   featureStatus,
+        ':week':     isoWeek,
+        ':pkPrefix': 'FEATURE#WEEK#',
       },
     })
   )

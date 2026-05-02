@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { queryClient } from './lib/query-client'
 import { useAuthStore } from './store/auth.store'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { AdminGuard } from './middleware/admin-guard'
@@ -33,15 +34,6 @@ const LoginPage                      = lazy(() => import('./pages/auth/login'))
 const RegisterPage                   = lazy(() => import('./pages/auth/register'))
 const VerifyPage                     = lazy(() => import('./pages/auth/verify-email'))
 const ResetPasswordPage              = lazy(() => import('./pages/auth/reset-password'))
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 60_000,
-    },
-  },
-})
 
 const PageLoader = () => (
   <div className="min-h-screen bg-ink flex items-center justify-center">

@@ -16,6 +16,7 @@ import {
   seedItem,
   getItem,
 } from './setup.js'
+import { getCurrentIsoWeek } from '@duseum/shared'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 // vi.mock is hoisted to the top of the file by Vitest before any imports run.
@@ -164,7 +165,7 @@ describe('subscriptions-webhook handler', () => {
 
   // ── payment_intent events (WeeklyFeature) ─────────────────────────────────
 
-  it('payment_intent.succeeded → confirms WEEKLY_FEATURE booking', async () => {
+  it('payment_intent.succeeded for a past week → sets status CONFIRMED (awaits Monday rotation)', async () => {
     await seedBooking()
     await seedBookingAuthorKey()
 
@@ -174,6 +175,45 @@ describe('subscriptions-webhook handler', () => {
     expect(result.batchItemFailures).toHaveLength(0)
     const item = await getItem(MAIN_TABLE, { PK: 'FEATURE#WEEK#2026-W16', SK: 'AUTHOR#author-001' })
     expect(item?.featureStatus).toBe('CONFIRMED')
+  })
+
+  it('payment_intent.succeeded for the current week → immediately activates WEEKLY_FEATURE booking', async () => {
+    const currentWeek = getCurrentIsoWeek()
+    await seedItem(MAIN_TABLE, {
+      PK:            `FEATURE#WEEK#${currentWeek}`,
+      SK:            'AUTHOR#author-current',
+      isoWeek:       currentWeek,
+      authorId:      'author-current',
+      featureStatus: 'PENDING',
+      bookedAt:      new Date().toISOString(),
+    })
+    await seedItem(MAIN_TABLE, {
+      PK:            'AUTHOR#author-current',
+      SK:            `FEATURE#WEEK#${currentWeek}`,
+      isoWeek:       currentWeek,
+      authorId:      'author-current',
+      featureStatus: 'PENDING',
+      bookedAt:      new Date().toISOString(),
+    })
+
+    const raw = makeStripeEvent('evt_008b', 'payment_intent.succeeded', {
+      id: 'pi_current',
+      metadata: {
+        type:      'WEEKLY_FEATURE',
+        isoWeek:   currentWeek,
+        authorId:  'author-current',
+        bookingId: 'booking-current',
+      },
+    })
+    const result = await handler(makeSqsEvent(raw) as never)
+
+    expect(result.batchItemFailures).toHaveLength(0)
+    const item = await getItem(MAIN_TABLE, {
+      PK: `FEATURE#WEEK#${currentWeek}`,
+      SK: 'AUTHOR#author-current',
+    })
+    expect(item?.featureStatus).toBe('ACTIVE')
+    expect(item?.activatedAt).toBeDefined()
   })
 
   it('payment_intent.payment_failed → cancels WEEKLY_FEATURE booking', async () => {

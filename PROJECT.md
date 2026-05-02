@@ -85,7 +85,7 @@ AUTHOR (Paid Weekly Feature)
 
 - **Platform Subscription** — flat monthly fee granting unlimited public artwork access
 - **Author Subscription** — per-author monthly fee set by the Author; platform takes a configurable cut (default: 10%)
-- **Paid Weekly Feature** — one-time fee per booking for an Author to be featured on the homepage for a full calendar week (up to 10 slots/week; first-come first-served)
+- **Paid Weekly Feature** — one-time fee per booking for an Author to be featured on the homepage for a full calendar week (up to `WEEKLY_FEATURE_SLOT_COUNT` slots/week, default: 3; first-come first-served)
 - Subscriptions are powered by Stripe Billing (recurring); Paid Weekly Feature is a Stripe one-time Payment Intent
 
 ### 1.6 Mission
@@ -203,7 +203,7 @@ To give artists a beautiful, museum-quality space to share their work — and to
 - **FR-ADMIN-02**: Admins can suspend/reinstate user accounts and individual profiles
 - **FR-ADMIN-03**: Admins can remove art pieces and comments that violate platform policies
 - **FR-ADMIN-04**: Admins can manually override the Daily Featured Author selection (e.g., to substitute an Author if the selected Author has violated policies); override is logged
-- **FR-ADMIN-05**: Admins can configure platform-level settings: free-tier piece limit, platform subscription price ID (Stripe), platform revenue cut percentage, weekly feature fee, weekly feature slot count (default: 10) — all stored in SSM Parameter Store
+- **FR-ADMIN-05**: Admins can configure platform-level settings: free-tier piece limit, platform subscription price ID (Stripe), platform revenue cut percentage, weekly feature fee, weekly feature slot count (default: 3) — all stored in SSM Parameter Store
 - **FR-ADMIN-06**: Admin dashboard shows: total users, active subscriptions (platform + author), MRR, new signups (7d/30d), flagged content queue, upcoming weekly feature bookings by week, weekly feature revenue (current month)
 - **FR-ADMIN-07**: Admins can cancel a paid weekly feature booking and issue a full refund (e.g., if an Author violates platform policies); the freed slot becomes available for re-booking
 
@@ -221,16 +221,16 @@ To give artists a beautiful, museum-quality space to share their work — and to
 
 #### Weekly Featured Authors (Paid)
 
-- **FR-FEAT-08**: The homepage displays a **Weekly Featured Authors** section showing up to **10 Authors** for the current calendar week (Monday 00:00 UTC → Sunday 23:59 UTC)
+- **FR-FEAT-08**: The homepage displays a **Weekly Featured Authors** section showing up to **`WEEKLY_FEATURE_SLOT_COUNT` Authors** (default: 3, admin-configurable) for the current calendar week (Monday 00:00 UTC → Sunday 23:59 UTC). The frontend reads `slotsTotal` from the API response — never hardcodes a slot count
 - **FR-FEAT-09**: Authors pay a **one-time flat fee** (configurable by Admins; default: $25/week) to book a weekly feature slot. Payment is a Stripe Payment Intent (not a recurring subscription)
-- **FR-FEAT-10**: Weekly feature slots are sold on a **first-come first-served** basis. Each week has exactly 10 slots. Authors book a specific week (current or future) from the available calendar; weeks where all 10 slots are already taken are shown as unavailable
+- **FR-FEAT-10**: Weekly feature slots are sold on a **first-come first-served** basis. Each week has exactly `WEEKLY_FEATURE_SLOT_COUNT` slots (default: 3, admin-configurable). Authors book a specific week (current or future) from the available calendar; weeks where all slots are already taken are shown as unavailable
 - **FR-FEAT-11**: An Author may only hold **one paid weekly feature booking per 3-month rolling period**. The 3-month window is calculated from the start of the booked week, looking back 3 calendar months. This limit is enforced at booking time; attempting to book a second slot within the window returns a `409 Conflict`
-- **FR-FEAT-12**: Booking flow: Author selects an available week → platform checks eligibility (FR-FEAT-11) and slot availability (FR-FEAT-10) → Stripe Payment Intent created → Author completes payment → booking confirmed and slot reserved atomically. If payment fails, no slot is reserved
+- **FR-FEAT-12**: Booking flow: Author selects an available week → platform checks eligibility (FR-FEAT-11) and slot availability (FR-FEAT-10) → Stripe Payment Intent created → Author completes payment → on `payment_intent.succeeded`: if the booking is for the **current ISO week** the status immediately transitions to `ACTIVE` (with `activatedAt`); if for a **future week** it transitions to `CONFIRMED` and waits for the Monday rotation (FR-FEAT-15). If payment fails, booking is set to `CANCELLED` — no slot is reserved
 - **FR-FEAT-13**: Confirmed bookings are **non-refundable** unless cancelled by an Admin (FR-ADMIN-07). Authors may not cancel their own bookings
-- **FR-FEAT-14**: The booking calendar shows the **current week plus up to 8 future weeks** (9 options total). Weeks beyond 8 weeks ahead are not yet open for booking. Booking the current week is allowed provided slots remain.
-- **FR-FEAT-15**: Weekly Featured Authors rotate automatically at Monday 00:00 UTC via EventBridge. The `maintenance-lambda` activates the upcoming week's confirmed bookings and archives the previous week's
+- **FR-FEAT-14**: The booking calendar shows the **current week plus up to `WEEKLY_FEATURE_ADVANCE_WEEKS` future weeks** (default: 3 advance weeks, admin-configurable). Booking the current week is allowed **Monday–Saturday (UTC)**. On **Sundays (UTC)** the current week is excluded from the calendar — it has fewer than 24 hours remaining and would give the Author almost no featured time. This Sunday block is enforced in `getEligibleWeeks()` in `packages/shared/src/features/` and propagates automatically to the availability endpoint and the booking validator.
+- **FR-FEAT-15**: Weekly Featured Authors rotate automatically at Monday 00:00 UTC via EventBridge. The `maintenance-lambda` runs three steps in order: (1) promote `CONFIRMED`→`ACTIVE` for all current-week bookings (sets `activatedAt`); (2) archive `ACTIVE`→`ARCHIVED` for all previous-week bookings; (3) safety-net: archive any remaining `CONFIRMED` bookings for the previous week (handles the rare case where payment was confirmed after Monday 00:00 UTC, missing last week's rotation)
 - **FR-FEAT-16**: The weekly feature section displays each featured Author's: display name, cover photo, a sample of their latest 2 public pieces, and a "View Profile" link. Order within the section is randomized each page load to avoid positional advantage
-- **FR-FEAT-17**: Stripe webhook events for the weekly feature Payment Intent (`payment_intent.succeeded`, `payment_intent.payment_failed`) are processed by `subscriptions-webhook-lambda` using the same idempotency pattern as subscription webhooks
+- **FR-FEAT-17**: Stripe webhook events for the weekly feature Payment Intent (`payment_intent.succeeded`, `payment_intent.payment_failed`) are processed by `subscriptions-webhook-lambda` using the same idempotency pattern as subscription webhooks. `payment_intent.succeeded` branches on ISO week: current week → booking immediately `ACTIVE` + `activatedAt` set; future week → booking `CONFIRMED` (awaits Monday rotation). `payment_intent.payment_failed` → booking `CANCELLED` with `cancelledBy=STRIPE_PAYMENT_FAILED`
 - **FR-FEAT-18**: Authors can view their upcoming and past weekly feature history in their Author dashboard, including payment receipts
 
 ---
@@ -571,7 +571,7 @@ Duseum uses a **single-table design** pattern with a main `duseum-{env}` table p
 | `DAILY_FEATURED_AUTHOR` | `{ authorId, selectedAt, overriddenBy? }` | Today's Daily Featured Author; written by `maintenance-lambda` daily |
 | `DAILY_FEATURED_EXCLUSIONS` | `{ authorIds: [...] }` | Last 7 Daily Featured Author IDs; used to prevent consecutive repeats |
 | `WEEKLY_FEATURE_FEE_USD` | `{ value: 25 }` | One-time fee for a weekly feature slot (admin-configurable) |
-| `WEEKLY_FEATURE_SLOT_COUNT` | `{ value: 10 }` | Max simultaneous weekly featured Authors (admin-configurable) |
+| `WEEKLY_FEATURE_SLOT_COUNT` | `{ value: 3 }` | Max simultaneous weekly featured Authors (admin-configurable; dev + prod seeded at 3) |
 | `WEEKLY_FEATURE_ADVANCE_WEEKS` | `{ value: 8 }` | How many weeks ahead Authors can book (admin-configurable) |
 
 ---
@@ -2098,7 +2098,7 @@ Get today's Daily Featured Author. Returns the Author's profile and spotlight da
 ---
 
 #### `GET /features/weekly` (public)
-Get the current week's Weekly Featured Authors (up to 10). Order is randomized per response to prevent positional advantage (FR-FEAT-16).
+Get the current week's Weekly Featured Authors (up to `slotsTotal` from config). Order is randomized per response to prevent positional advantage (FR-FEAT-16). The frontend must use the `slotsTotal` field from the response — never a hardcoded constant.
 
 **Query params**: `week` (optional ISO week string `YYYY-Www`; defaults to current week)
 
@@ -2108,8 +2108,8 @@ Get the current week's Weekly Featured Authors (up to 10). Order is randomized p
   "isoWeek": "2025-W32",
   "weekStartDate": "2025-08-04",
   "weekEndDate": "2025-08-10",
-  "slotsFilled": 7,
-  "slotsTotal": 10,
+  "slotsFilled": 2,
+  "slotsTotal": 3,
   "featuredAuthors": [
     {
       "authorId": "uuid",
@@ -2137,15 +2137,15 @@ Get the booking availability calendar for the next 8 weeks. Shows slot counts pe
       "isoWeek": "2025-W33",
       "weekStartDate": "2025-08-11",
       "weekEndDate": "2025-08-17",
-      "slotsTotal": 10,
-      "slotsAvailable": 4,
+      "slotsTotal": 3,
+      "slotsAvailable": 1,
       "isAvailable": true
     },
     {
       "isoWeek": "2025-W34",
       "weekStartDate": "2025-08-18",
       "weekEndDate": "2025-08-24",
-      "slotsTotal": 10,
+      "slotsTotal": 3,
       "slotsAvailable": 0,
       "isAvailable": false
     }
@@ -3074,7 +3074,7 @@ Goal: Daily Featured Author selection and Weekly Featured Author booking work en
 | Implement `features-lambda`: `GET /features/daily`, `GET /features/weekly`, `GET /features/weekly/availability`, `POST /features/weekly/book`, `GET /features/weekly/my-bookings` | 🤝 | Booking route: eligibility check (3-month window) + slot availability check + Stripe Payment Intent creation |
 | Implement weekly feature Payment Intent handling in `subscriptions-webhook-lambda` (`payment_intent.succeeded` → confirm booking; `payment_intent.payment_failed` → release held slot) | 🤝 | Must use idempotency table; same pattern as subscription webhooks |
 | Implement `maintenance-lambda` daily task: random Author selection (exclude last 7) → write `DAILY_FEATURED_AUTHOR` config; update `DAILY_FEATURED_EXCLUSIONS` | 🤝 | EventBridge rule: `cron(0 0 * * ? *)` |
-| Implement `maintenance-lambda` weekly task: Monday rotation → query `GSI-WeeklyFeatureByStatus` for `CONFIRMED` bookings of current week → set to `ACTIVE`; set previous week `ACTIVE` → `ARCHIVED` | 🤝 | EventBridge rule: `cron(0 0 ? * MON *)` |
+| Implement `maintenance-lambda` weekly task: Monday rotation — (1) `CONFIRMED`→`ACTIVE` for current week; (2) `ACTIVE`→`ARCHIVED` for previous week; (3) safety-net: `CONFIRMED`→`ARCHIVED` for previous week (late payments) | 🤝 | EventBridge rule: `cron(0 0 ? * MON *)` |
 | Add admin routes: `PUT /admin/features/daily/override`, `DELETE /admin/features/weekly/bookings/{bookingId}` (with Stripe refund), `GET /admin/features/weekly` | 🤝 | In `admin-lambda` |
 | Build frontend: homepage Daily Featured Author spotlight + Weekly Featured Authors carousel; Author dashboard booking UI (availability calendar, book CTA, booking history); Admin panel feature management | 🤝 | |
 | Test full booking flow locally: book week → Stripe CLI `stripe trigger payment_intent.succeeded` → booking confirmed → Monday rotation cron runs → `ACTIVE` | 👤 | |
@@ -3484,6 +3484,7 @@ maintenance-lambda/
 ├── weekly-rotation.integration.test.ts
 │   - CONFIRMED bookings for current week → promoted to ACTIVE
 │   - Previous week ACTIVE bookings → archived to ARCHIVED
+│   - CONFIRMED bookings for previous week → archived to ARCHIVED (safety-net for late payments)
 │   - CANCELLED bookings are not promoted
 
 subscriptions-webhook-lambda/
@@ -3491,8 +3492,9 @@ subscriptions-webhook-lambda/
 │   - customer.subscription.created → Subscription record created in DynamoDB
 │   - customer.subscription.deleted → Subscription marked CANCELLED
 │   - invoice.payment_failed → Subscription marked PAST_DUE
-│   - payment_intent.succeeded (weekly feature) → WeeklyFeatureBooking status set to CONFIRMED
-│   - payment_intent.payment_failed (weekly feature) → WeeklyFeatureBooking slot released (deleted/cancelled)
+│   - payment_intent.succeeded (current week) → WeeklyFeatureBooking immediately ACTIVE + activatedAt set
+│   - payment_intent.succeeded (future week) → WeeklyFeatureBooking status set to CONFIRMED (awaits Monday rotation)
+│   - payment_intent.payment_failed (weekly feature) → WeeklyFeatureBooking status set to CANCELLED
 │   - Replay of same eventId → idempotent (no duplicate processing)
 │   - Invalid Stripe signature → 400 logged, event dropped
 
@@ -3843,7 +3845,7 @@ services:
         aws dynamodb put-item --table-name duseum-local-config \
           --item '{\"PK\":{\"S\":\"WEEKLY_FEATURE_FEE_USD\"},\"value\":{\"N\":\"25\"}}' &&
         aws dynamodb put-item --table-name duseum-local-config \
-          --item '{\"PK\":{\"S\":\"WEEKLY_FEATURE_SLOT_COUNT\"},\"value\":{\"N\":\"10\"}}' &&
+          --item '{\"PK\":{\"S\":\"WEEKLY_FEATURE_SLOT_COUNT\"},\"value\":{\"N\":\"3\"}}' &&
         aws dynamodb put-item --table-name duseum-local-config \
           --item '{\"PK\":{\"S\":\"WEEKLY_FEATURE_ADVANCE_WEEKS\"},\"value\":{\"N\":\"8\"}}' &&
         aws dynamodb put-item --table-name duseum-local-config \

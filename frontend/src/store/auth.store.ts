@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { queryClient } from '../lib/query-client'
 import {
   signIn as amplifySignIn,
   signOut as amplifySignOut,
@@ -151,12 +152,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true })
     if (IS_LOCAL_AUTH) {
       localSession.clear()
+      queryClient.clear()
       set({ user: null, isLoading: false, error: null })
       return
     }
     try {
       await amplifySignOut()
     } finally {
+      queryClient.clear()
       set({ user: null, isLoading: false, error: null })
     }
   },
