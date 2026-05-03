@@ -1,12 +1,18 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PageLayout } from '../../components/layout/PageLayout'
 import { EyebrowLabel } from '../../components/ui/EyebrowLabel'
 import { useSubscriptions } from '../../hooks/use-subscriptions'
 
 export default function SubscriptionSuccessPage() {
   const navigate = useNavigate()
-  const { hasPlatformSub, isLoading, refetch } = useSubscriptions()
+  const [params] = useSearchParams()
+  const authorId = params.get('authorId') ?? ''
+
+  const { hasPlatformSub, hasAuthorSub, isLoading, refetch } = useSubscriptions()
+
+  const isActivated = authorId ? hasAuthorSub(authorId) : hasPlatformSub
+  const redirectTo  = authorId ? `/authors/${authorId}` : '/browse'
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -16,24 +22,24 @@ export default function SubscriptionSuccessPage() {
   }, [refetch])
 
   useEffect(() => {
-    if (hasPlatformSub) {
-      const t = setTimeout(() => navigate('/browse'), 2_500)
+    if (isActivated) {
+      const t = setTimeout(() => navigate(redirectTo), 2_500)
       return () => clearTimeout(t)
     }
-  }, [hasPlatformSub, navigate])
+  }, [isActivated, navigate, redirectTo])
 
   return (
     <PageLayout>
       <section className="min-h-screen py-32 px-8 bg-ink flex items-center justify-center">
         <div className="text-center max-w-md">
           <EyebrowLabel>Subscription</EyebrowLabel>
-          {hasPlatformSub ? (
+          {isActivated ? (
             <>
               <h1 className="font-display text-[clamp(2rem,4vw,2.8rem)] font-normal text-warm-white leading-[1.12] mb-4">
-                Welcome to Duseum
+                {authorId ? 'Subscription active' : 'Welcome to Duseum'}
               </h1>
               <p className="text-[0.92rem] font-light text-stone-light leading-[1.8]">
-                Your subscription is active. Redirecting to the gallery…
+                {authorId ? 'Your author subscription is active. Redirecting…' : 'Your subscription is active. Redirecting to the gallery…'}
               </p>
             </>
           ) : (
