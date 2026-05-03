@@ -90,6 +90,19 @@
 |---|---|---|---|
 | auth.store.ts | auth.store.test.ts | `signOut()` calls `queryClient.clear()` before nulling user (FR-TESTING-06) | ✅ |
 
+### Transactional Email Tests — Gap Analysis (FR-NOTIF-12)
+
+> Tests for the email module (`specs/notifications/transactional-emails.md`) are not yet written.
+
+| Scope | What | Status |
+|---|---|---|
+| auth-triggers integration | `sendWelcomeEmail` fired after PostConfirmation | ❌ |
+| subscriptions-webhook integration | `sendPlatformSubStartedEmail` + admin notif on PLATFORM created | ❌ |
+| subscriptions-webhook integration | `sendAuthorSubStartedViewerEmail` + author email on AUTHOR_SUB created | ❌ |
+| subscriptions-webhook integration | `sendPlatformSubCanceledEmail` on PLATFORM deleted | ❌ |
+| subscriptions-webhook integration | `sendAuthorSubCanceledViewerEmail` + author email on AUTHOR_SUB deleted | ❌ |
+| account-events unit | `sendConnectOnboardingCompleteEmail` on charges_enabled false→true; not fired on true→true | ❌ |
+
 ---
 
 ## New/modified files

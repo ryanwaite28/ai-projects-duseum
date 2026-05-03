@@ -33,6 +33,8 @@
 - Weekly feature booking: `PK=FEATURE#WEEK#{isoWeek}, SK=AUTHOR#{authorId}`
 - Connect reverse-lookup: `PK=CONNECT#{stripeConnectAccountId}, SK=META`
 
+**Related spec**: `specs/notifications/transactional-emails.md` — fire-and-forget email sends added to `handleSubscriptionCreated`, `handleSubscriptionDeleted`, and `handleAccountUpdated`; `handlePaymentIntentSucceeded` sends admin notification.
+
 **Event handler map**:
 | Stripe event | Action |
 |---|---|

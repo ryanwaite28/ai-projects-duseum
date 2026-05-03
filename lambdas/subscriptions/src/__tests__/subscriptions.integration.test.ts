@@ -259,6 +259,20 @@ describe('POST /subscriptions/authors/{authorId}', () => {
     expect(body.checkoutUrl).toBe('https://checkout.stripe.com/test-session-url')
   })
 
+  it('returns 400 when caller tries to subscribe to themselves', async () => {
+    await seedAuthorProfile(USER_ID)
+
+    const event = makeEvent('POST', `/subscriptions/authors/${USER_ID}`, {
+      userId: USER_ID,
+      pathParameters: { authorId: USER_ID },
+    })
+    const result = await handler(event as never, makeCtx())
+
+    expect(result.statusCode).toBe(400)
+    const body = JSON.parse(result.body as string)
+    expect(body.error.message).toMatch(/yourself/)
+  })
+
   it('returns 409 when caller is already subscribed to this author', async () => {
     await seedUserAccount()
     await seedAuthorProfile()

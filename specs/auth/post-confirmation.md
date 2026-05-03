@@ -4,7 +4,7 @@
 **FR coverage**: FR-AUTH-02, FR-PROF-01, FR-VIEW-01
 **Relevant PROJECT.md sections**: 2.1, 2.2, 2.3, 4.2
 
-**What this implements**: Cognito Post-Confirmation Lambda trigger that automatically creates a Viewer profile in DynamoDB when a user verifies their email — no additional setup required.
+**What this implements**: Cognito Post-Confirmation Lambda trigger that automatically creates a Viewer profile in DynamoDB when a user verifies their email — no additional setup required. Also fires a welcome email (fire-and-forget) via `sendWelcomeEmail`. See `specs/notifications/transactional-emails.md`.
 
 **Prerequisites**: DynamoDB main table deployed; `packages/shared/src/db/users.repository.ts` exists (or will be created); `auth-triggers-lambda` wired as Cognito Post-Confirmation trigger
 

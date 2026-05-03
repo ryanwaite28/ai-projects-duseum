@@ -31,6 +31,8 @@ export const createAuthorCheckout = async (
 ): Promise<APIGatewayProxyStructuredResultV2> => {
   const { userId } = context
 
+  if (userId === authorId) throw new ValidationError('You cannot subscribe to yourself.')
+
   // Author must exist and be active
   const authorProfile = await getAuthorProfile(docClient, authorId)
   if (!authorProfile || authorProfile.status !== 'ACTIVE') {

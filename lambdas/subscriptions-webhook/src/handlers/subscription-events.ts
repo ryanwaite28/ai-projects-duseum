@@ -12,9 +12,22 @@ import type { Subscription } from '@duseum/shared'
 import {
   adjustAuthorSubscriberCount,
   getFullAuthorSubscription,
+  getUserAccount,
+  getViewerProfile,
+  getAuthorProfile,
   upsertSubscription,
+  sendPlatformSubStartedEmail,
+  sendPlatformSubCanceledEmail,
+  sendAuthorSubStartedViewerEmail,
+  sendAuthorSubCanceledViewerEmail,
+  sendAuthorSubStartedAuthorEmail,
+  sendAuthorSubCanceledAuthorEmail,
+  sendPlatformNewSubscriberEmail,
 } from '@duseum/shared'
 import { logger } from './logger.js'
+
+const BASE_URL = process.env['APP_BASE_URL'] ?? 'https://duseum.com'
+const ADMIN_EMAIL = process.env['SES_ADMIN_ADDRESS'] ?? 'admin@duseum.com'
 
 // In Stripe API version 2026-03-25.dahlia, current_period_end moved from the
 // subscription root into each items.data[] entry. The top-level field no longer exists.
@@ -91,6 +104,57 @@ export const handleSubscriptionCreated = async (
   if (record.targetId !== 'PLATFORM') {
     await adjustAuthorSubscriberCount(client, record.targetId, 1)
   }
+
+  // Fire-and-forget transactional emails
+  void (async () => {
+    try {
+      const [viewerAccount, viewerProfile] = await Promise.all([
+        getUserAccount(client, record.userId),
+        getViewerProfile(client, record.userId),
+      ])
+      if (!viewerAccount?.email) return
+      const viewerEmail = viewerAccount.email
+      const viewerName = viewerProfile?.displayName ?? viewerEmail
+
+      if (record.targetId === 'PLATFORM') {
+        await Promise.all([
+          sendPlatformSubStartedEmail(viewerEmail, {
+            displayName: viewerName,
+            currentPeriodEnd: record.currentPeriodEnd ?? '',
+            browseUrl: `${BASE_URL}/browse`,
+            manageUrl: `${BASE_URL}/settings`,
+          }),
+          sendPlatformNewSubscriberEmail(ADMIN_EMAIL, {
+            userId: record.userId,
+            currentPeriodEnd: record.currentPeriodEnd ?? undefined,
+          }),
+        ])
+      } else {
+        const [authorAccount, authorProfile] = await Promise.all([
+          getUserAccount(client, record.targetId),
+          getAuthorProfile(client, record.targetId),
+        ])
+        const authorName = authorProfile?.displayName ?? record.targetId
+        await Promise.all([
+          sendAuthorSubStartedViewerEmail(viewerEmail, {
+            viewerDisplayName: viewerName,
+            authorDisplayName: authorName,
+            authorUrl: `${BASE_URL}/authors/${record.targetId}`,
+            currentPeriodEnd: record.currentPeriodEnd ?? '',
+            manageUrl: `${BASE_URL}/settings`,
+          }),
+          ...(authorAccount?.email
+            ? [sendAuthorSubStartedAuthorEmail(authorAccount.email, {
+                authorDisplayName: authorName,
+                dashboardUrl: `${BASE_URL}/dashboard`,
+              })]
+            : []),
+        ])
+      }
+    } catch (err) {
+      logger.error('Failed to send subscription started emails', { userId: record.userId, err })
+    }
+  })()
 }
 
 export const handleSubscriptionUpdated = async (
@@ -140,6 +204,48 @@ export const handleSubscriptionDeleted = async (
   if (wasActive) {
     await adjustAuthorSubscriberCount(client, record.targetId, -1)
   }
+
+  // Fire-and-forget transactional emails
+  void (async () => {
+    try {
+      const [viewerAccount, viewerProfile] = await Promise.all([
+        getUserAccount(client, record.userId),
+        getViewerProfile(client, record.userId),
+      ])
+      if (!viewerAccount?.email) return
+      const viewerEmail = viewerAccount.email
+      const viewerName = viewerProfile?.displayName ?? viewerEmail
+
+      if (record.targetId === 'PLATFORM') {
+        await sendPlatformSubCanceledEmail(viewerEmail, {
+          displayName: viewerName,
+          manageUrl: `${BASE_URL}/settings`,
+        })
+      } else {
+        const [authorAccount, authorProfile] = await Promise.all([
+          getUserAccount(client, record.targetId),
+          getAuthorProfile(client, record.targetId),
+        ])
+        const authorName = authorProfile?.displayName ?? record.targetId
+        await Promise.all([
+          sendAuthorSubCanceledViewerEmail(viewerEmail, {
+            viewerDisplayName: viewerName,
+            authorDisplayName: authorName,
+            authorUrl: `${BASE_URL}/authors/${record.targetId}`,
+            manageUrl: `${BASE_URL}/settings`,
+          }),
+          ...(authorAccount?.email
+            ? [sendAuthorSubCanceledAuthorEmail(authorAccount.email, {
+                authorDisplayName: authorName,
+                dashboardUrl: `${BASE_URL}/dashboard`,
+              })]
+            : []),
+        ])
+      }
+    } catch (err) {
+      logger.error('Failed to send subscription canceled emails', { userId: record.userId, err })
+    }
+  })()
 }
 
 export const handleSubscriptionPaused = async (

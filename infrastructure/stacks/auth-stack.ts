@@ -16,9 +16,16 @@
 import * as cdk from 'aws-cdk-lib'
 import * as cognito from 'aws-cdk-lib/aws-cognito'
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
+import * as iam from 'aws-cdk-lib/aws-iam'
 import * as ssm from 'aws-cdk-lib/aws-ssm'
 import { Construct } from 'constructs'
 import { DuseumLambdaFunction } from '../constructs/lambda-function'
+
+const secretArn = (scope: cdk.Stack, envName: string, secretPath: string) =>
+  cdk.Fn.sub(
+    `arn:aws:secretsmanager:\${AWS::Region}:\${AWS::AccountId}:secret:${secretPath}*`,
+    {}
+  )
 
 // ── Props ──────────────────────────────────────────────────────────────────────
 
@@ -157,12 +164,29 @@ export class AuthStack extends cdk.Stack {
       mainTableName
     )
 
+    const isProd = envName === 'prod'
+
     const triggerFn = new DuseumLambdaFunction(this, 'auth-triggers', {
       envName,
       description: 'Cognito Post-Confirmation: auto-creates UserAccount + ViewerProfile',
       environment: {
         DYNAMODB_TABLE_NAME: mainTableName,
+        APP_BASE_URL: isProd ? 'https://duseum.com' : `https://${envName}.duseum.com`,
       },
+      initialPolicy: [
+        new iam.PolicyStatement({
+          sid: 'AuthTriggerSes',
+          effect: iam.Effect.ALLOW,
+          actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+          resources: ['*'],
+        }),
+        new iam.PolicyStatement({
+          sid: 'AuthTriggerSesFromSecret',
+          effect: iam.Effect.ALLOW,
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [secretArn(this, envName, `duseum/${envName}/ses/from-address`)],
+        }),
+      ],
     })
 
     // Grant least-privilege DynamoDB write access (§5.6: PutItem on main table)
