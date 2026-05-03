@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config'
+import { htmlAsTextPlugin } from '../../vitest.html-plugin'
 
 export default defineConfig({
+  plugins: [htmlAsTextPlugin],
   test: {
     fileParallelism: false,
     // Set env vars before any module is imported so the shared docClient
