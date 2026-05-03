@@ -588,6 +588,53 @@ Added to "Common Mistakes — Lambda / Application": don't declare `current_peri
 
 ---
 
+## Phase 12 — Author Subscription Checkout: Stripe Destination Charges Mismatch (May 3)
+
+### What happened
+
+A viewer attempting to subscribe to an author received a Stripe error: `"No such price: 'price_1TSJ7YD8T9aiYbbv42a8iwtW'"`. The author had previously set a subscription price (which succeeded and returned a new price ID `price_1TSr8bDSkxzf2UiOhjIBnVIl`), but the viewer checkout still used the old price ID stored in DynamoDB.
+
+### Root cause — two separate issues
+
+**Issue 1: Wrong Stripe account for price creation (primary)**
+
+Author subscription prices were created on the **connected account** via `createConnectPrice(params, stripeConnectAccountId)`. However, `createCheckoutSession` uses the platform Stripe client (no `stripeAccount` option) — the Destination Charges model with `transfer_data.destination`. The platform Stripe account has no knowledge of prices created on a connected account. Any price created with `stripeAccount` is scoped to that connected account and is invisible to the platform. Hence "No such price".
+
+This is a fundamental architecture mismatch: the code implements **Destination Charges** (price + customer + session all on platform; funds routed to connected account via `transfer_data`) but price creation was using the **Direct Charges** pattern (price on connected account). Both prices (old and new) would have failed; only the old price was visible in the CloudWatch log because it was already in DynamoDB at the time of the test.
+
+**Issue 2: DynamoDB had the old price (secondary)**
+
+Two author accounts existed in dev. "Mystic" still had the old price stored from a pre-fix test. "Zofis" had the new price stored correctly. DynamoDB scans confirmed the `updateAuthorProfile` function was working correctly — there was no DynamoDB bug.
+
+### Why this was non-obvious
+
+1. `createConnectPrice` and `createPlatformPrice` differ by a single parameter (`stripeAccount`). No TypeScript error exists — both return a `Price` object with the same shape.
+2. The Stripe `prices.create` call succeeded on the connected account, returning a valid price ID. The error only surfaced at checkout (a separate Lambda invocation), not at price-creation time.
+3. "No such price" looks like a stale data problem (DynamoDB not updated) rather than a Stripe account scope problem. Initial diagnosis was drawn toward the DynamoDB update path before a DynamoDB scan confirmed the data was correct.
+4. The Destination Charges vs. Direct Charges distinction is not enforced by any type system — both use the same Stripe SDK methods.
+
+### The fix
+
+Added `createPlatformPrice(params)` and `deactivatePlatformPrice(priceId)` to `packages/shared/src/stripe/index.ts` — identical to `createConnectPrice`/`archiveConnectPrice` but without `stripeAccount`. Updated `set-subscription-price.ts` to use both. Old prices (already on connected accounts) are left as-is; going forward all prices are created on the platform account.
+
+### Rule added to CLAUDE.md
+
+Added to "Common Mistakes — Lambda / Application": don't create author subscription prices on the connected account; use `createPlatformPrice()`. Destination Charges requires price + customer + checkout session all on the platform account; `transfer_data.destination` routes funds to the connected account.
+
+### Regression test added
+
+`subscriptions.integration.test.ts` — "set price then subscriber checkout → checkout URL returned (no 'No such price')": sets price via `POST /users/me/author/subscription-price`, then calls `POST /subscriptions/authors/{authorId}` as a viewer, asserts 200 + `checkoutUrl` returned.
+
+### Lessons learned
+
+**Stripe Connect has two distinct charge models; mixing patterns produces silent bugs.** Destination Charges (platform-side) and Direct Charges (connected-account-side) are not interchangeable. When implementing Connect features, the first question is: which model is in use? All Stripe API calls within a checkout flow must target the same account.
+
+**"No such price" always means the price lives on a different Stripe account.** If a price ID exists in DynamoDB and the checkout returns "No such price", the DynamoDB data is correct — the checkout is looking on the wrong Stripe account.
+
+**Validate the full user flow in integration tests, not just individual endpoints.** A test for `POST /users/me/author/subscription-price` that only checks DynamoDB would not have caught this. The regression test chains set-price → subscribe — only the round-trip reveals the account mismatch.
+
+---
+
 ## Cross-Cutting Lessons
 
 ### 1. The spec gate applies to everything — including test fixes and CI failures

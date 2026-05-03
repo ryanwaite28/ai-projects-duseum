@@ -56,9 +56,10 @@ vi.mock('@duseum/shared', async (importOriginal) => {
       }
       return Promise.resolve({ id: accountId, charges_enabled: true, details_submitted: true })
     }),
-    createConnectPrice: vi.fn().mockResolvedValue({
+    createPlatformPrice: vi.fn().mockResolvedValue({
       id: 'price_test_mock_001',
     }),
+    deactivatePlatformPrice: vi.fn().mockResolvedValue(undefined),
   }
 })
 
@@ -467,6 +468,41 @@ describe('POST /users/me/author/subscription-price', () => {
     })
     const result = await handler(event as never, makeCtx())
     expect(result.statusCode).toBe(404)
+  })
+
+  // Regression: prices must be created on the platform account so the platform-account
+  // checkout session can resolve them (Destination Charges mismatch — prices were
+  // previously created on the connected account, causing "No such price" at checkout).
+  it('regression: set price then subscribe → checkout resolves price from platform account', async () => {
+    const AUTHOR = 'author-regression-001'
+    const VIEWER = 'viewer-regression-001'
+
+    await seedAuthorProfile(AUTHOR, {
+      stripeConnectAccountId: 'acct_test_connect_001',
+      authorSubscriptionPriceId: null,
+      authorSubscriptionMonthlyUsd: null,
+    })
+    await seedUserAccount(VIEWER)
+
+    // Step 1: Author sets price → stored to DynamoDB as platform price
+    const setPrice = makeEvent('POST', '/users/me/author/subscription-price', {
+      userId: AUTHOR,
+      body:   { amountUsd: 5 },
+    })
+    const setPriceResult = await handler(setPrice as never, makeCtx())
+    expect(setPriceResult.statusCode).toBe(200)
+    const setPriceBody = JSON.parse(setPriceResult.body as string)
+    expect(setPriceBody.priceId).toBe('price_test_mock_001')
+
+    // Step 2: Viewer subscribes — checkout must succeed (no "No such price")
+    const subscribe = makeEvent('POST', `/subscriptions/authors/${AUTHOR}`, {
+      userId: VIEWER,
+      pathParameters: { authorId: AUTHOR },
+    })
+    const subscribeResult = await handler(subscribe as never, makeCtx())
+    expect(subscribeResult.statusCode).toBe(200)
+    const subscribeBody = JSON.parse(subscribeResult.body as string)
+    expect(subscribeBody.checkoutUrl).toBe('https://checkout.stripe.com/test-session-url')
   })
 })
 

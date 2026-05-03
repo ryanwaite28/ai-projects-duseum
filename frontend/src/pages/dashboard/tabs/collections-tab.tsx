@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useMe } from '../../../hooks/use-me'
-import { listArtworks } from '../../../services/artworks.service'
+import { listMyArtworks } from '../../../services/artworks.service'
 import { collectionsService } from '../../../services/collections.service'
 import type { AuthorCollection } from '../../../types/artwork'
 import type { CollectionBody, CollectionPiece } from '../../../services/collections.service'
@@ -95,12 +95,10 @@ function CollectionModal({
 
 function ManagePiecesModal({
   collection,
-  authorId,
   onClose,
   onSaved,
 }: {
   collection: AuthorCollection
-  authorId:   string
   onClose:    () => void
   onSaved:    () => void
 }) {
@@ -113,8 +111,7 @@ function ManagePiecesModal({
 
   const { data: myArtworks } = useQuery({
     queryKey: ['artworks', 'mine', 'all'],
-    queryFn:  () => listArtworks({ authorId, limit: 100 }),
-    enabled:  !!authorId,
+    queryFn:  () => listMyArtworks({ limit: 100 }),
   })
 
   const currentPieces: CollectionPiece[] = piecesRes?.pieces ?? []
@@ -215,7 +212,7 @@ export function CollectionsTab() {
     <>
       {showNew  && <CollectionModal onClose={() => setShowNew(false)} onSaved={invalidate} />}
       {editing  && <CollectionModal initial={editing} onClose={() => setEditing(null)} onSaved={invalidate} />}
-      {managing && <ManagePiecesModal collection={managing} authorId={userId} onClose={() => setManaging(null)} onSaved={invalidate} />}
+      {managing && <ManagePiecesModal collection={managing} onClose={() => setManaging(null)} onSaved={invalidate} />}
 
       {confirmDel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
