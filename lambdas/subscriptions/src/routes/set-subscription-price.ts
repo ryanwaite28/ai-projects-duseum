@@ -77,7 +77,8 @@ export const setSubscriptionPrice = async (
     unit_amount:  amountUsd * 100,
     currency:     'usd',
     recurring:    { interval: 'month' },
-    product_data: { name: 'Author Subscription' },
+    product_data: { name: `Author Subscription - ${userId}` },
+    metadata: { authorId: userId }
   })
 
   await updateAuthorProfile(docClient, userId, {
@@ -89,7 +90,9 @@ export const setSubscriptionPrice = async (
   // a failure here does not affect the caller since the new price is already live.
   // Stripe does not support price deletion — deactivation is the functional equivalent.
   if (oldPriceId) {
-    void deactivatePlatformPrice(oldPriceId).catch(() => {/* non-critical */})
+    void deactivatePlatformPrice(oldPriceId).catch((error) => {
+      console.warn(error);
+    })
   }
 
   return ok({ priceId: price.id, monthlyUsd: amountUsd })

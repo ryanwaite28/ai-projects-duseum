@@ -348,6 +348,67 @@ describe('subscriptions-webhook handler', () => {
     expect(result.batchItemFailures).toHaveLength(1)
   })
 
+  // ── subscriberCount counter ───────────────────────────────────────────────
+
+  it('customer.subscription.created with AUTHOR_SUB → increments subscriberCount on author profile', async () => {
+    const authorId = 'author-sub-count-001'
+    const userId   = 'user-sub-count-001'
+
+    // Seed minimal author profile (subscriberCount starts at 0 implicitly — ADD initialises to 0)
+    await seedItem(MAIN_TABLE, {
+      PK: `USER#${authorId}`, SK: 'PROFILE#AUTHOR',
+      userId, profileType: 'AUTHOR', displayName: 'Sub Counter Author',
+    })
+
+    const raw = makeStripeEvent('evt_sc_001', 'customer.subscription.created', makeSub({
+      metadata: { userId, type: 'AUTHOR_SUB', authorId },
+    }))
+    await handler(makeSqsEvent(raw) as never)
+
+    const profile = await getItem(MAIN_TABLE, { PK: `USER#${authorId}`, SK: 'PROFILE#AUTHOR' })
+    expect(profile?.subscriberCount).toBe(1)
+  })
+
+  it('customer.subscription.deleted with AUTHOR_SUB (was ACTIVE) → decrements subscriberCount', async () => {
+    const authorId = 'author-sub-count-002'
+    const userId   = 'user-sub-count-002'
+
+    // Seed author profile with subscriberCount = 1 (pre-existing active subscriber)
+    await seedItem(MAIN_TABLE, {
+      PK: `USER#${authorId}`, SK: 'PROFILE#AUTHOR',
+      userId: authorId, profileType: 'AUTHOR', displayName: 'Sub Counter Author 2',
+      subscriberCount: 1,
+    })
+    // Seed existing ACTIVE subscription so the deleted handler knows to decrement
+    await seedItem(MAIN_TABLE, {
+      PK: `USER#${userId}`, SK: `SUB#AUTHOR#${authorId}`,
+      userId, targetId: authorId, status: 'ACTIVE',
+      stripeSubscriptionId: 'sub_sc_002', stripeCustomerId: 'cus_sc_002',
+      createdAt: new Date().toISOString(),
+    })
+
+    const raw = makeStripeEvent('evt_sc_002', 'customer.subscription.deleted', makeSub({
+      id: 'sub_sc_002', status: 'canceled',
+      metadata: { userId, type: 'AUTHOR_SUB', authorId },
+    }))
+    await handler(makeSqsEvent(raw) as never)
+
+    const profile = await getItem(MAIN_TABLE, { PK: `USER#${authorId}`, SK: 'PROFILE#AUTHOR' })
+    expect(profile?.subscriberCount).toBe(0)
+  })
+
+  it('customer.subscription.created with PLATFORM → does not change any author subscriberCount', async () => {
+    const raw = makeStripeEvent('evt_sc_003', 'customer.subscription.created', makeSub({
+      metadata: { userId: 'user-plat-001', type: 'PLATFORM' },
+    }))
+    const result = await handler(makeSqsEvent(raw) as never)
+
+    expect(result.batchItemFailures).toHaveLength(0)
+    // No author profile should have been written with a subscriberCount
+    const authorProfile = await getItem(MAIN_TABLE, { PK: 'USER#undefined', SK: 'PROFILE#AUTHOR' })
+    expect(authorProfile).toBeNull()
+  })
+
   // ── account.updated (Stripe Connect) ─────────────────────────────────────
 
   it('account.updated → caches connectChargesEnabled on Author profile (FR-SUB-13)', async () => {

@@ -9,7 +9,11 @@
 
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
 import type { Subscription } from '@duseum/shared'
-import { upsertSubscription } from '@duseum/shared'
+import {
+  adjustAuthorSubscriberCount,
+  getFullAuthorSubscription,
+  upsertSubscription,
+} from '@duseum/shared'
 import { logger } from './logger.js'
 
 // In Stripe API version 2026-03-25.dahlia, current_period_end moved from the
@@ -83,15 +87,38 @@ export const handleSubscriptionCreated = async (
   const record = buildRecord(sub, 'ACTIVE')
   if (!record) return
   await upsertSubscription(client, record)
+  // Increment author subscriber count for new ACTIVE author subscriptions
+  if (record.targetId !== 'PLATFORM') {
+    await adjustAuthorSubscriberCount(client, record.targetId, 1)
+  }
 }
 
 export const handleSubscriptionUpdated = async (
   client: DynamoDBDocumentClient,
   sub: StripeSubscription
 ): Promise<void> => {
-  const record = buildRecord(sub, toStatus(sub.status))
+  const newStatus = toStatus(sub.status)
+  const record = buildRecord(sub, newStatus)
   if (!record) return
+
+  // Read old status before overwriting so we can adjust the counter correctly
+  let oldStatus: Subscription['status'] | undefined
+  if (record.targetId !== 'PLATFORM') {
+    const existing = await getFullAuthorSubscription(client, record.userId, record.targetId)
+    oldStatus = existing?.status
+  }
+
   await upsertSubscription(client, record)
+
+  if (record.targetId !== 'PLATFORM') {
+    const wasActive = oldStatus === 'ACTIVE'
+    const isActive  = newStatus === 'ACTIVE'
+    if (!wasActive && isActive) {
+      await adjustAuthorSubscriberCount(client, record.targetId, 1)
+    } else if (wasActive && !isActive) {
+      await adjustAuthorSubscriberCount(client, record.targetId, -1)
+    }
+  }
 }
 
 export const handleSubscriptionDeleted = async (
@@ -100,7 +127,19 @@ export const handleSubscriptionDeleted = async (
 ): Promise<void> => {
   const record = buildRecord(sub, 'CANCELLED')
   if (!record) return
+
+  // Read old status — only decrement if it was ACTIVE (not already PAUSED)
+  let wasActive = false
+  if (record.targetId !== 'PLATFORM') {
+    const existing = await getFullAuthorSubscription(client, record.userId, record.targetId)
+    wasActive = existing?.status === 'ACTIVE'
+  }
+
   await upsertSubscription(client, record)
+
+  if (wasActive) {
+    await adjustAuthorSubscriberCount(client, record.targetId, -1)
+  }
 }
 
 export const handleSubscriptionPaused = async (
@@ -110,6 +149,10 @@ export const handleSubscriptionPaused = async (
   const record = buildRecord(sub, 'PAUSED')
   if (!record) return
   await upsertSubscription(client, record)
+  // Stripe only sends paused when transitioning from active → paused
+  if (record.targetId !== 'PLATFORM') {
+    await adjustAuthorSubscriberCount(client, record.targetId, -1)
+  }
 }
 
 export const handleSubscriptionResumed = async (
@@ -119,4 +162,8 @@ export const handleSubscriptionResumed = async (
   const record = buildRecord(sub, 'ACTIVE')
   if (!record) return
   await upsertSubscription(client, record)
+  // Stripe only sends resumed when transitioning from paused → active
+  if (record.targetId !== 'PLATFORM') {
+    await adjustAuthorSubscriberCount(client, record.targetId, 1)
+  }
 }

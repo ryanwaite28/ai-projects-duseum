@@ -417,4 +417,58 @@ describe('GET /authors/{authorId}/collections', () => {
     expect(body.items).toHaveLength(1)
     expect(body.items[0].title).toBe('Free Col')
   })
+
+  it('includes pieceCount and coverPieceUrl in list response', async () => {
+    const coverId = randomUUID()
+    await Promise.all([
+      seedAuthorProfile(),
+      seedArtwork(coverId, 'PUBLIC'),
+    ])
+
+    // Create collection
+    const createRes = await callHandler(makeEvent('POST', '/collections', {
+      userId: AUTHOR_ID,
+      body:   { title: 'Enriched Col', visibility: 'FREE' },
+    }))
+    const { collectionId } = JSON.parse(createRes.body) as { collectionId: string }
+
+    // Add one piece
+    await callHandler(makeEvent('POST', `/collections/${collectionId}/pieces`, {
+      userId: AUTHOR_ID,
+      pathParameters: { collectionId },
+      body:   { artworkId: coverId, order: 1 },
+    }))
+
+    const res = await callHandler(makeEvent('GET', `/authors/${AUTHOR_ID}/collections`, {
+      pathParameters: { authorId: AUTHOR_ID },
+    }))
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+
+    const enriched = body.items.find((c: { collectionId: string }) => c.collectionId === collectionId)
+    expect(enriched).toBeDefined()
+    expect(enriched.pieceCount).toBe(1)
+    expect(enriched.coverPieceUrl).toContain(`media.test.duseum.com/${coverId}`)
+  })
+
+  it('returns pieceCount=0 and coverPieceUrl=null for empty collection', async () => {
+    await seedAuthorProfile()
+
+    const createRes = await callHandler(makeEvent('POST', '/collections', {
+      userId: AUTHOR_ID,
+      body:   { title: 'Empty Col', visibility: 'FREE' },
+    }))
+    const { collectionId } = JSON.parse(createRes.body) as { collectionId: string }
+
+    const res = await callHandler(makeEvent('GET', `/authors/${AUTHOR_ID}/collections`, {
+      pathParameters: { authorId: AUTHOR_ID },
+    }))
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+
+    const col = body.items.find((c: { collectionId: string }) => c.collectionId === collectionId)
+    expect(col).toBeDefined()
+    expect(col.pieceCount).toBe(0)
+    expect(col.coverPieceUrl).toBeNull()
+  })
 })

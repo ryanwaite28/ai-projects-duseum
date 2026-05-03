@@ -258,3 +258,41 @@ export const listCollectionItems = async (
     lastKey: result.LastEvaluatedKey as Record<string, unknown> | undefined,
   }
 }
+
+export const countCollectionItems = async (
+  client: DynamoDBDocumentClient,
+  collectionId: string
+): Promise<number> => {
+  const result = await client.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
+      ExpressionAttributeValues: {
+        ':pk': `COLLECTION#${collectionId}`,
+        ':prefix': 'ARTWORK#',
+      },
+      Select: 'COUNT',
+    })
+  )
+  return result.Count ?? 0
+}
+
+export const getFirstCollectionItem = async (
+  client: DynamoDBDocumentClient,
+  collectionId: string
+): Promise<CollectionItem | null> => {
+  const result = await client.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
+      ExpressionAttributeValues: {
+        ':pk': `COLLECTION#${collectionId}`,
+        ':prefix': 'ARTWORK#',
+      },
+      ScanIndexForward: true,
+      Limit: 1,
+    })
+  )
+  const item = (result.Items ?? [])[0]
+  return item ? (item as CollectionItem) : null
+}

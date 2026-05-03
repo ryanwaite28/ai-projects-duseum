@@ -171,7 +171,16 @@ export default function AuthorProfilePage() {
                     </div>
                   )}
                   <div className="p-5">
-                    <h3 className="font-display text-[1rem] font-semibold text-warm-white mb-1">{col.title}</h3>
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <h3 className="font-display text-[1rem] font-semibold text-warm-white leading-snug">{col.title}</h3>
+                      <span className={`flex-shrink-0 text-[0.62rem] font-medium tracking-[0.16em] uppercase px-[0.6rem] py-[0.25rem] rounded-sm ${
+                        col.visibility === 'FREE'
+                          ? 'text-[#5a9e6e] bg-[#5a9e6e]/12'
+                          : 'text-gold bg-gold/12'
+                      }`}>
+                        {col.visibility === 'FREE' ? 'Free' : 'Subscribers'}
+                      </span>
+                    </div>
                     {col.description && (
                       <p className="text-[0.78rem] font-light text-stone-light line-clamp-2 mb-3">{col.description}</p>
                     )}
