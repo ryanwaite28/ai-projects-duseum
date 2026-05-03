@@ -66,6 +66,17 @@ const seedPlatformSub = (userId: string) =>
 const seedAuthorSub = (viewerId: string, authorId: string) =>
   seedItem({ PK: `USER#${viewerId}`, SK: `SUB#AUTHOR#${authorId}`, status: 'ACTIVE' })
 
+const seedAuthorProfile = (authorId: string, displayName: string) =>
+  seedItem({
+    PK: `USER#${authorId}`,
+    SK: 'PROFILE#AUTHOR',
+    userId: authorId,
+    profileType: 'AUTHOR',
+    status: 'ACTIVE',
+    displayName,
+    bio: '',
+  })
+
 // Plant multiple PUBLIC pieces by the same author to control free-tier rank.
 // FREE_TIER_LIMIT seeded as 3 in setup.ts.
 const seedPublicPiecesForAuthor = async (authorId: string, count: number) => {
@@ -121,6 +132,7 @@ describe('GET /artworks/{artworkId}', () => {
   })
 
   it('returns 200 with plain CloudFront URL for public piece within free tier (unauthenticated)', async () => {
+    await seedAuthorProfile(AUTHOR_ID, 'Test Author')
     await seedArtwork()  // rank 1 (only piece) — within free tier limit of 3
     const event = makeEvent('GET', '/artworks/art-001', {
       pathParameters: { artworkId: 'art-001' },
@@ -131,6 +143,7 @@ describe('GET /artworks/{artworkId}', () => {
     expect(body.artworkId).toBe('art-001')
     expect(body.imageUrl).toContain('media.test.duseum.com/art-001')
     expect(body.imageUrlExpiresAt).toBeUndefined()
+    expect(body.authorDisplayName).toBe('Test Author')
   })
 
   it('returns 402 for public piece beyond free tier for unauthenticated caller', async () => {

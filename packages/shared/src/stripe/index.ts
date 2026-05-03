@@ -146,6 +146,24 @@ export const archiveConnectPrice = async (
   await stripe.prices.update(priceId, { active: false }, { stripeAccount })
 }
 
+// Platform-account price helpers — used for author subscription prices under the
+// Destination Charges model (transfer_data). Prices must live on the platform
+// account so the platform-account checkout session can resolve them.
+
+export const createPlatformPrice = async (
+  params: PriceCreateParams
+): Promise<Price> => {
+  const stripe = await getStripeClient()
+  return stripe.prices.create(params)
+}
+
+export const deactivatePlatformPrice = async (
+  priceId: string
+): Promise<void> => {
+  const stripe = await getStripeClient()
+  await stripe.prices.update(priceId, { active: false })
+}
+
 // ── Refunds ───────────────────────────────────────────────────────────────────
 
 export const issueRefund = async (

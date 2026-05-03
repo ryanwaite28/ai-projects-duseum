@@ -90,6 +90,19 @@
 |---|---|---|---|
 | auth.store.ts | auth.store.test.ts | `signOut()` calls `queryClient.clear()` before nulling user (FR-TESTING-06) | ✅ |
 
+### Transactional Email Tests — Gap Analysis (FR-NOTIF-12)
+
+> Tests for the email module (`specs/notifications/transactional-emails.md`) are not yet written.
+
+| Scope | What | Status |
+|---|---|---|
+| auth-triggers integration | `sendWelcomeEmail` fired after PostConfirmation | ❌ |
+| subscriptions-webhook integration | `sendPlatformSubStartedEmail` + admin notif on PLATFORM created | ❌ |
+| subscriptions-webhook integration | `sendAuthorSubStartedViewerEmail` + author email on AUTHOR_SUB created | ❌ |
+| subscriptions-webhook integration | `sendPlatformSubCanceledEmail` on PLATFORM deleted | ❌ |
+| subscriptions-webhook integration | `sendAuthorSubCanceledViewerEmail` + author email on AUTHOR_SUB deleted | ❌ |
+| account-events unit | `sendConnectOnboardingCompleteEmail` on charges_enabled false→true; not fired on true→true | ❌ |
+
 ---
 
 ## New/modified files
@@ -97,13 +110,14 @@
 ### Lambda integration tests
 - `lambdas/artworks/src/__tests__/artwork-mutations.integration.test.ts` — `PUT /artworks/{id}`, `DELETE /artworks/{id}` (soft + permanent), `GET /artworks/mine`
 - `lambdas/features/src/__tests__/weekly-and-bookings.integration.test.ts` — `GET /features/weekly`, `GET /features/weekly/my-bookings`
-- `lambdas/subscriptions/src/__tests__/subscriptions.integration.test.ts` — extended with `GET /subscriptions/me/subscribers`
+- `lambdas/subscriptions/src/__tests__/subscriptions.integration.test.ts` — extended with `GET /subscriptions/me/subscribers`; mock updated `createConnectPrice` → `createPlatformPrice` + `deactivatePlatformPrice`; regression test added: set price → subscriber checkout → "No such price" fix (Destination Charges mismatch)
+- `lambdas/users/src/__tests__/users.integration.test.ts` — extended: `GET /authors/{authorId}/collections` — owner (JWT sub === authorId) sees FREE + SUBSCRIBER_ONLY; non-owner / unauthenticated sees FREE only; 404 for nonexistent author
 - `lambdas/subscriptions/src/__tests__/setup.ts` — added `GSI-SubscribersByAuthor` to table definition
-- `lambdas/subscriptions-webhook/src/__tests__/stripe-webhook.integration.test.ts` — extended: current-week `payment_intent.succeeded` → immediately ACTIVE; past-week → CONFIRMED; test description clarified
+- `lambdas/subscriptions-webhook/src/__tests__/stripe-webhook.integration.test.ts` — extended: current-week `payment_intent.succeeded` → immediately ACTIVE; past-week → CONFIRMED; test description clarified; `makeSub` fixture updated to Stripe API `2026-03-25.dahlia` shape (`items.data[]`); regression test for `current_period_end: null` → `currentPeriodEnd: null` written, no crash
 - `lambdas/maintenance/src/__tests__/weekly-rotation.integration.test.ts` — extended: safety-net test for CONFIRMED previous-week → ARCHIVED
 
 ### Frontend service unit tests
-- `frontend/src/services/__tests__/artworks.service.test.ts`
+- `frontend/src/services/__tests__/artworks.service.test.ts` — extended with `listMyArtworks` tests (GET /artworks/mine, limit/cursor params, PRIVATE artworks in response)
 - `frontend/src/services/__tests__/features.service.test.ts`
 - `frontend/src/services/__tests__/follows.service.test.ts`
 - `frontend/src/services/__tests__/social.service.test.ts`

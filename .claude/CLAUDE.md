@@ -22,7 +22,16 @@ You are a **master systems design architect, DevOps & Software Engineer**. Apply
 4. **Wait for the user to reply: "Approved — proceed."** — do not write implementation code until this exact phrase is received
 5. **Implement** — only the files listed in the approved spec
 6. **Write or update tests** — unit tests for service-layer mapping and pure functions; integration tests for new or changed Lambda routes; regression tests when fixing a bug. No spec is complete until tests are written and pass.
-7. **Update the spec** — tick done-when checkboxes, set Status to ✅ Implemented
+7. **Update the primary spec** — tick done-when checkboxes, set Status to ✅ Implemented
+8. **Sync all related specs** — for every other spec whose documented behaviour, IAM policy, env vars, file list, or DynamoDB patterns were affected by this change, update that spec now. Do not leave any spec describing a state that no longer exists.
+9. **Update `specs/testing/test-coverage.md`** — add any new test gaps (❌) introduced by this change; mark previously open gaps (✅) that are now closed
+
+**Spec sync rules (step 8 — mandatory)**:
+- If you added IAM statements to a Lambda, update that Lambda's CDK stack spec (`specs/infrastructure/`) to document the new statements.
+- If you changed a Lambda handler (new logic, new imports, new fire-and-forget side effects), update the spec that owns that handler — even if you also created a new spec for the feature.
+- If a new spec introduces behaviour that spans multiple existing specs (e.g. a new email module that touches auth-triggers, subscriptions-webhook, and two CDK stacks), add a **Related spec** cross-reference line to each affected spec pointing to the new one.
+- If a spec's "Done when" checklist or "New/modified files" list is now outdated, rewrite it to reflect the current state.
+- Specs describe current reality, not history. A spec that is wrong is worse than no spec.
 
 **Testing requirements by layer** (see PROJECT.md Section 15.4 for FR-TESTING codes):
 - **Lambda routes** (FR-TESTING-01/02): integration test against MiniStack (real DynamoDB at `localhost:4566`) using the existing Vitest + `setup.ts` pattern in each `lambdas/{name}/src/__tests__/` directory. Every new route needs: happy path, 404/error cases, and response shape assertion. Routes with nested response shapes must assert exact top-level key names.
@@ -48,7 +57,9 @@ You are a **master systems design architect, DevOps & Software Engineer**. Apply
 
 **Never skip steps 1–4** — not for "obvious" fixes, not for single-line changes, not for CI failures, not for test expectation corrections. The spec IS the approval gate — a "yes sounds good" or "approve" in chat is not an approval to write code. Only the exact phrase **"Approved — proceed."** unlocks implementation.
 
-> **Why this matters**: skipping the spec gate — even for a 1-line test fix — risks changing the wrong side of a contract (e.g. fixing a correct test to match a wrong implementation, or vice versa). The spec step forces alignment with PROJECT.md before any file is touched.
+**Never skip steps 7–9** — implementation without spec sync leaves the spec directory as a museum of past decisions, not a living description of the system. Every session must end with specs, test-coverage, and cross-references fully reflecting what was actually built.
+
+> **Why this matters**: skipping the spec gate — even for a 1-line test fix — risks changing the wrong side of a contract (e.g. fixing a correct test to match a wrong implementation, or vice versa). The spec step forces alignment with PROJECT.md before any file is touched. Skipping spec sync post-implementation means the next engineer (or future AI session) reads specs that describe a system that no longer exists — creating confusion, duplicate work, and missed invariants.
 
 ---
 
@@ -241,6 +252,8 @@ All IAM resources tagged: `Project=duseum`, `Environment={env}`, `ManagedBy=CDK`
 - Don't log PII (email, names, payment info) — see Section 13.2
 - Don't tag `v*.*.*` without completing the production go-live checklist (Section 11.7)
 - **Don't write a Lambda spec that calls `getConfigValue()` or `getConfigNumber()` without explicitly adding `dynamodb:GetItem` on `configTableName` to `initialPolicy`** — CDK synth succeeds without it, but the Lambda throws `AccessDeniedException` at runtime. The omission is invisible until a user hits the endpoint. Pattern: `new iam.PolicyStatement({ sid: '...ConfigRead', actions: ['dynamodb:GetItem'], resources: dynamoArns(this, configTableName) })`
+- **Don't declare `current_period_end` at the top level of a `StripeSubscription` local type** — in Stripe API `2026-03-25.dahlia` (and later), this field was moved from the subscription root into each `items.data[]` entry. Read it as `sub.items.data[0]?.current_period_end ?? null`. `Subscription.currentPeriodEnd` must be typed `string | null` and every render site must guard for null. Accessing the old top-level field returns `undefined`, and `new Date(undefined * 1000).toISOString()` throws `"Invalid time value"` — causing the Lambda to crash, the SQS event to DLQ, and no record to be written.
+- **Don't create author subscription prices on the connected Stripe account** — use `createPlatformPrice()` (no `stripeAccount`). `createCheckoutSession` uses the platform Stripe client (Destination Charges pattern with `transfer_data.destination`); prices created on a connected account are invisible to the platform account → "No such price" at checkout. Similarly, use `deactivatePlatformPrice()` (not `archiveConnectPrice`) to deactivate old prices. Stripe does not support price deletion — deactivation (`active: false`) is the functional equivalent.
 
 ---
 

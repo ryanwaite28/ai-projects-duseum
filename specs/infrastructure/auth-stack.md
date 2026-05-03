@@ -43,6 +43,11 @@
 - `cognito_user_pool_arn`
 - `cognito_client_id`
 
+**`auth-triggers` IAM additions** (see `specs/notifications/transactional-emails.md`):
+- `AuthTriggerSes`: `ses:SendEmail`, `ses:SendRawEmail` on `*`
+- `AuthTriggerSesFromSecret`: `secretsmanager:GetSecretValue` on `duseum/{env}/ses/from-address`
+- Env var added: `APP_BASE_URL` (`https://duseum.com` prod, `https://{env}.duseum.com` dev)
+
 **Tags**: `Project=duseum`, `Environment={env}`, `Stack=auth`, `ManagedBy=CDK`
 
 **Tests to write**:

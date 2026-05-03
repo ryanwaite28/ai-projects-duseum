@@ -442,7 +442,10 @@ export class ApiStack extends cdk.Stack {
     const subsWebhookLambda = new DuseumLambdaFunction(this, 'subscriptions-webhook', {
       envName,
       description: `[${envName}] subscriptions-webhook-lambda — process Stripe events from SQS`,
-      environment: { ...commonEnv },
+      environment: {
+        ...commonEnv,
+        SES_ADMIN_ADDRESS: 'admin@duseum.com',
+      },
       initialPolicy: [
         mainTableCrudPolicy,
         new iam.PolicyStatement({
@@ -465,6 +468,18 @@ export class ApiStack extends cdk.Stack {
           effect: iam.Effect.ALLOW,
           actions: ['secretsmanager:GetSecretValue'],
           resources: [secretArn(this, envName, `duseum/${envName}/stripe/secret-key`)],
+        }),
+        new iam.PolicyStatement({
+          sid: 'WebhookSes',
+          effect: iam.Effect.ALLOW,
+          actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+          resources: ['*'],
+        }),
+        new iam.PolicyStatement({
+          sid: 'WebhookSesFromSecret',
+          effect: iam.Effect.ALLOW,
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [secretArn(this, envName, `duseum/${envName}/ses/from-address`)],
         }),
       ],
     })

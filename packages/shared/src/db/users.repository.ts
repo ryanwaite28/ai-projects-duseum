@@ -270,6 +270,21 @@ export const decrementAuthorFollowerCount = async (
   )
 }
 
+export const adjustAuthorSubscriberCount = async (
+  client: DynamoDBDocumentClient,
+  authorId: string,
+  delta: 1 | -1
+): Promise<void> => {
+  await client.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: authorProfileKey(authorId),
+      UpdateExpression: 'ADD subscriberCount :delta',
+      ExpressionAttributeValues: { ':delta': delta },
+    })
+  )
+}
+
 /**
  * Updates the `status` field on a ViewerProfile or AuthorProfile.
  * Used by admin-lambda to suspend or reinstate profiles (FR-ADMIN-02).

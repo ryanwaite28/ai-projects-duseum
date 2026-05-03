@@ -55,7 +55,7 @@ export const setSubscriptionPrice = async (event, context) => {
   // Validate: non-negative integer, max 50
   // amountUsd === 0 → disable (set null, no Stripe call)
   // amountUsd 1–50 → create Stripe Price on Connect account
-  const price = await createConnectPrice({ unit_amount: amountUsd * 100, currency: 'usd', recurring: { interval: 'month' }, product_data: { name: 'Author Subscription' } }, author.stripeConnectAccountId)
+  const price = await createConnectPrice({ unit_amount: amountUsd * 100, currency: 'usd', recurring: { interval: 'month' }, product_data: { name: `Author Subscription - ${authorId}` }, metadata: { authorId: author.authorId } }, author.stripeConnectAccountId)
   await updateAuthorProfile(docClient, userId, { authorSubscriptionPriceId: price.id, authorSubscriptionMonthlyUsd: amountUsd })
   return ok({ priceId: price.id, monthlyUsd: amountUsd })
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useMe } from '../../../hooks/use-me'
-import { listArtworks } from '../../../services/artworks.service'
+import { listMyArtworks } from '../../../services/artworks.service'
 import { collectionsService } from '../../../services/collections.service'
 import type { AuthorCollection } from '../../../types/artwork'
 import type { CollectionBody, CollectionPiece } from '../../../services/collections.service'
@@ -95,16 +95,15 @@ function CollectionModal({
 
 function ManagePiecesModal({
   collection,
-  authorId,
   onClose,
   onSaved,
 }: {
   collection: AuthorCollection
-  authorId:   string
   onClose:    () => void
   onSaved:    () => void
 }) {
   const qc = useQueryClient()
+  const [pieceError, setPieceError] = useState<string | null>(null)
 
   const { data: piecesRes } = useQuery({
     queryKey: ['collections', collection.collectionId, 'pieces'],
@@ -113,22 +112,29 @@ function ManagePiecesModal({
 
   const { data: myArtworks } = useQuery({
     queryKey: ['artworks', 'mine', 'all'],
-    queryFn:  () => listArtworks({ authorId, limit: 100 }),
-    enabled:  !!authorId,
+    queryFn:  () => listMyArtworks({ limit: 100 }),
   })
 
   const currentPieces: CollectionPiece[] = piecesRes?.pieces ?? []
   const currentIds = new Set(currentPieces.map((p) => p.artworkId))
 
+  const invalidatePieces = () => {
+    setPieceError(null)
+    qc.invalidateQueries({ queryKey: ['collections', collection.collectionId, 'pieces'] })
+    qc.invalidateQueries({ queryKey: ['collections', 'mine'] })
+  }
+
   const addPiece = useMutation({
     mutationFn: (artworkId: string) =>
       collectionsService.addPiece(collection.collectionId, artworkId, currentPieces.length + 1),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['collections', collection.collectionId, 'pieces'] }),
+    onSuccess: invalidatePieces,
+    onError:   () => setPieceError('Failed to add piece. Please try again.'),
   })
 
   const removePiece = useMutation({
     mutationFn: (artworkId: string) => collectionsService.removePiece(collection.collectionId, artworkId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['collections', collection.collectionId, 'pieces'] }),
+    onSuccess: invalidatePieces,
+    onError:   () => setPieceError('Failed to remove piece. Please try again.'),
   })
 
   return (
@@ -171,7 +177,10 @@ function ManagePiecesModal({
           })}
         </div>
 
-        <div className="mt-4 pt-4 border-t border-gold/10">
+        <div className="mt-4 pt-4 border-t border-gold/10 space-y-3">
+          {pieceError && (
+            <p className="text-[0.8rem] text-[#c0544a] text-center">{pieceError}</p>
+          )}
           <button
             onClick={() => { onSaved(); onClose() }}
             className="w-full bg-gold hover:bg-gold-light text-ink font-body text-sm font-medium uppercase tracking-[0.04em] py-[0.7rem] rounded-sm transition-colors"
@@ -215,7 +224,7 @@ export function CollectionsTab() {
     <>
       {showNew  && <CollectionModal onClose={() => setShowNew(false)} onSaved={invalidate} />}
       {editing  && <CollectionModal initial={editing} onClose={() => setEditing(null)} onSaved={invalidate} />}
-      {managing && <ManagePiecesModal collection={managing} authorId={userId} onClose={() => setManaging(null)} onSaved={invalidate} />}
+      {managing && <ManagePiecesModal collection={managing} onClose={() => setManaging(null)} onSaved={invalidate} />}
 
       {confirmDel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">

@@ -14,7 +14,7 @@
 import type { PostConfirmationTriggerHandler } from 'aws-lambda'
 import { docClient } from '@duseum/shared'
 import { logger } from '@duseum/shared'
-import { createUserAccount, createViewerProfile } from '@duseum/shared'
+import { createUserAccount, createViewerProfile, sendWelcomeEmail } from '@duseum/shared'
 
 // ── Handler ────────────────────────────────────────────────────────────────────
 
@@ -59,6 +59,12 @@ export const handler: PostConfirmationTriggerHandler = async (event) => {
   })
 
   logger.info('Post-confirmation: user records created', { userId })
+
+  const baseUrl = process.env['APP_BASE_URL'] ?? 'https://duseum.com'
+  void sendWelcomeEmail(email, {
+    displayName,
+    browseUrl: `${baseUrl}/browse`,
+  }).catch((err) => logger.error('Failed to send welcome email', { userId, err }))
 
   // Cognito trigger contract — always return the event unchanged
   return event

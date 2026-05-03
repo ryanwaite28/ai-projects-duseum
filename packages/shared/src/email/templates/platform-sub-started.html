@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Duseum subscription is active</title>
+</head>
+<body style="margin:0;padding:0;background-color:#0e0d0b;font-family:'DM Sans',Arial,sans-serif;color:#f5f0e8;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    <tr>
+      <td align="center" style="padding:48px 16px;">
+        <table width="600" cellpadding="0" cellspacing="0" role="presentation"
+               style="max-width:600px;background-color:#1c1a16;border:1px solid rgba(200,151,58,0.18);border-radius:4px;overflow:hidden;">
+
+          <tr>
+            <td style="padding:28px 40px;border-bottom:1px solid rgba(200,151,58,0.1);">
+              <span style="font-size:10px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:#c8973a;">Duseum</span>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:40px 40px 16px;">
+              <p style="margin:0 0 12px;font-size:11px;font-weight:500;letter-spacing:0.2em;text-transform:uppercase;color:#c8973a;">
+                Subscription confirmed
+              </p>
+              <h1 style="margin:0 0 20px;font-size:26px;font-weight:400;color:#fdfaf4;line-height:1.2;">
+                Your subscription is active, {{displayName}}.
+              </h1>
+              <div style="width:40px;height:1px;background-color:#c8973a;opacity:0.5;margin-bottom:24px;"></div>
+              <p style="margin:0 0 8px;font-size:14px;font-weight:300;color:#ede7d9;line-height:1.8;">
+                You now have full access to every piece on Duseum — including the private galleries of authors you follow.
+              </p>
+              {{#if currentPeriodEnd}}
+              <p style="margin:0 0 28px;font-size:12px;font-weight:300;color:#7a7068;">
+                Next renewal: {{currentPeriodEnd}}
+              </p>
+              {{/if}}
+              <a href="{{browseUrl}}"
+                 style="display:inline-block;background-color:#c8973a;color:#0e0d0b;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;text-decoration:none;padding:14px 36px;border-radius:2px;">
+                Browse the gallery
+              </a>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:28px 40px;border-top:1px solid rgba(200,151,58,0.1);margin-top:32px;">
+              <p style="margin:0;font-size:11px;font-weight:300;color:#7a7068;line-height:1.6;">
+                You can manage or cancel your subscription at any time from
+                <a href="{{manageUrl}}" style="color:#c8973a;text-decoration:none;">your settings</a>.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -17,8 +17,8 @@ import type { DuseumContext } from '@duseum/shared'
 import {
   NotFoundError,
   ValidationError,
-  archiveConnectPrice,
-  createConnectPrice,
+  createPlatformPrice,
+  deactivatePlatformPrice,
   docClient,
   getAuthorProfile,
   ok,
@@ -71,25 +71,28 @@ export const setSubscriptionPrice = async (
 
   const oldPriceId = author.authorSubscriptionPriceId ?? null
 
-  const price = await createConnectPrice(
-    {
-      unit_amount:  amountUsd * 100,
-      currency:     'usd',
-      recurring:    { interval: 'month' },
-      product_data: { name: 'Author Subscription' },
-    },
-    author.stripeConnectAccountId
-  )
+  // Price must live on the platform account so the platform-account checkout
+  // session (transfer_data Destination Charges model) can resolve it.
+  const price = await createPlatformPrice({
+    unit_amount:  amountUsd * 100,
+    currency:     'usd',
+    recurring:    { interval: 'month' },
+    product_data: { name: `Author Subscription - ${userId}` },
+    metadata: { authorId: userId }
+  })
 
   await updateAuthorProfile(docClient, userId, {
     authorSubscriptionPriceId:    price.id,
     authorSubscriptionMonthlyUsd: amountUsd,
   })
 
-  // Archive the previous price after the profile is updated — fire-and-forget;
+  // Deactivate the previous platform price after the profile is updated — fire-and-forget;
   // a failure here does not affect the caller since the new price is already live.
+  // Stripe does not support price deletion — deactivation is the functional equivalent.
   if (oldPriceId) {
-    void archiveConnectPrice(oldPriceId, author.stripeConnectAccountId).catch(() => {/* non-critical */})
+    void deactivatePlatformPrice(oldPriceId).catch((error) => {
+      console.warn(error);
+    })
   }
 
   return ok({ priceId: price.id, monthlyUsd: amountUsd })

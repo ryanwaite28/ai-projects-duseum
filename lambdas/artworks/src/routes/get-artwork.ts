@@ -21,6 +21,7 @@ import {
   docClient,
   generateSignedUrl,
   getArtPiece,
+  getAuthorProfile,
   getAuthorSubscription,
   getFreeTierLimit,
   getPlatformSubscription,
@@ -88,7 +89,7 @@ export const getArtwork = async (
   // Increment view count — fire-and-forget, never blocks response
   void incrementViewCount(docClient, artworkId).catch(() => {/* swallow — non-critical */})
 
-  const [imageResolved, viewerReactionRecord] = await Promise.all([
+  const [imageResolved, viewerReactionRecord, authorProfile] = await Promise.all([
     decision.signUrl
       ? generateSignedUrl(piece.s3Key, SIGNED_URL_TTL).then(url => ({
           imageUrl:          url,
@@ -96,12 +97,14 @@ export const getArtwork = async (
         }))
       : Promise.resolve({ imageUrl: publicUrl(piece.s3Key), imageUrlExpiresAt: undefined }),
     userId ? getUserReaction(docClient, artworkId, userId) : Promise.resolve(null),
+    getAuthorProfile(docClient, piece.authorId),
   ])
 
   return ok({
     ...piece,
-    imageUrl:          imageResolved.imageUrl,
+    imageUrl:           imageResolved.imageUrl,
     ...(imageResolved.imageUrlExpiresAt ? { imageUrlExpiresAt: imageResolved.imageUrlExpiresAt } : {}),
-    viewerReaction:    viewerReactionRecord?.reactionType ?? null,
+    viewerReaction:     viewerReactionRecord?.reactionType ?? null,
+    authorDisplayName:  authorProfile?.displayName ?? '',
   })
 }
