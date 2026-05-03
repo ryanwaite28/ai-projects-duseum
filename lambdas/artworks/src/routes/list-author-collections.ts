@@ -2,14 +2,19 @@
 // lambdas/artworks/src/routes/list-author-collections.ts
 // GET /authors/{authorId}/collections — §8.5
 // JWT optional. Owner sees all collections; others see FREE-only.
+// Each collection is enriched with pieceCount and coverPieceUrl.
 // =============================================================================
 
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
 import type { DuseumContext } from '@duseum/shared'
 import {
+  countCollectionItems,
   docClient,
+  getArtPiece,
+  getFirstCollectionItem,
   listCollectionsByAuthor,
   ok,
+  publicUrl,
 } from '@duseum/shared'
 
 export const listAuthorCollectionsRoute = async (
@@ -31,9 +36,26 @@ export const listAuthorCollectionsRoute = async (
     lastKey,
   })
 
+  const enriched = await Promise.all(
+    result.items.map(async (collection) => {
+      const [pieceCount, firstItem] = await Promise.all([
+        countCollectionItems(docClient, collection.collectionId),
+        getFirstCollectionItem(docClient, collection.collectionId),
+      ])
+
+      let coverPieceUrl: string | null = null
+      if (firstItem) {
+        const piece = await getArtPiece(docClient, firstItem.artworkId)
+        if (piece) coverPieceUrl = publicUrl(piece.s3Key)
+      }
+
+      return { ...collection, pieceCount, coverPieceUrl }
+    })
+  )
+
   const cursor = result.lastKey
     ? Buffer.from(JSON.stringify(result.lastKey)).toString('base64url')
     : undefined
 
-  return ok({ items: result.items, ...(cursor ? { cursor } : {}) })
+  return ok({ items: enriched, ...(cursor ? { cursor } : {}) })
 }

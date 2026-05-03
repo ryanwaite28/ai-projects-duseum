@@ -121,10 +121,17 @@ export class ApiStack extends cdk.Stack {
     }
 
     // ── Common DynamoDB main table CRUD policy ────────────────────────────────
+    // BatchGetItem: batchGetUserDisplayNames (social-lambda list-comments)
+    // TransactWriteItems: reactions, comments, collections, follows (atomic writes)
     const mainTableCrudPolicy = new iam.PolicyStatement({
       sid: 'DynamoDbMainTableCrud',
       effect: iam.Effect.ALLOW,
-      actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem', 'dynamodb:Query'],
+      actions: [
+        'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem',
+        'dynamodb:DeleteItem', 'dynamodb:Query',
+        'dynamodb:BatchGetItem',
+        'dynamodb:TransactWriteItems',
+      ],
       resources: dynamoArns(this, mainTableName),
     })
 
@@ -352,7 +359,9 @@ export class ApiStack extends cdk.Stack {
 
     // =========================================================================
     // subscriptions-lambda (Section 4.2, 5.6)
-    // IAM: DynamoDB ReadWrite (main) + SecretsManager (Stripe key)
+    // IAM: DynamoDB ReadWrite (main) + GetItem (config) + SecretsManager (Stripe key)
+    // Config table read: create-platform-checkout reads PLATFORM_SUB_PRICE_ID;
+    //                    create-author-checkout reads PLATFORM_CUT_PERCENT.
     // =========================================================================
 
     const subscriptionsLambda = new DuseumLambdaFunction(this, 'subscriptions', {
@@ -361,6 +370,12 @@ export class ApiStack extends cdk.Stack {
       environment: { ...commonEnv },
       initialPolicy: [
         mainTableCrudPolicy,
+        new iam.PolicyStatement({
+          sid: 'SubsConfigRead',
+          effect: iam.Effect.ALLOW,
+          actions: ['dynamodb:GetItem'],
+          resources: dynamoArns(this, configTableName),
+        }),
         new iam.PolicyStatement({
           sid: 'SubsStripeKey',
           effect: iam.Effect.ALLOW,
@@ -427,7 +442,10 @@ export class ApiStack extends cdk.Stack {
     const subsWebhookLambda = new DuseumLambdaFunction(this, 'subscriptions-webhook', {
       envName,
       description: `[${envName}] subscriptions-webhook-lambda — process Stripe events from SQS`,
-      environment: { ...commonEnv },
+      environment: {
+        ...commonEnv,
+        SES_ADMIN_ADDRESS: 'admin@duseum.com',
+      },
       initialPolicy: [
         mainTableCrudPolicy,
         new iam.PolicyStatement({
@@ -450,6 +468,18 @@ export class ApiStack extends cdk.Stack {
           effect: iam.Effect.ALLOW,
           actions: ['secretsmanager:GetSecretValue'],
           resources: [secretArn(this, envName, `duseum/${envName}/stripe/secret-key`)],
+        }),
+        new iam.PolicyStatement({
+          sid: 'WebhookSes',
+          effect: iam.Effect.ALLOW,
+          actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+          resources: ['*'],
+        }),
+        new iam.PolicyStatement({
+          sid: 'WebhookSesFromSecret',
+          effect: iam.Effect.ALLOW,
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [secretArn(this, envName, `duseum/${envName}/ses/from-address`)],
         }),
       ],
     })
@@ -615,6 +645,12 @@ export class ApiStack extends cdk.Stack {
       },
       initialPolicy: [
         mainTableCrudPolicy,
+        new iam.PolicyStatement({
+          sid: 'MaintenanceScan',
+          effect: iam.Effect.ALLOW,
+          actions: ['dynamodb:Scan'],
+          resources: dynamoArns(this, mainTableName),
+        }),
         new iam.PolicyStatement({
           sid: 'MaintenanceIdempotency',
           effect: iam.Effect.ALLOW,

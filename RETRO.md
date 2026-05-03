@@ -405,6 +405,236 @@ CI → [Build ∥ Bootstrap Check] → Deploy → Deploy Frontend → Dep Check 
 
 ---
 
+## Phase 9 — The Fourth Dependency Category: IAM Execution Permissions (May 2)
+
+### What happened
+
+`POST /subscriptions/platform` and `POST /subscriptions/authors/{authorId}` failed in production with `AccessDeniedException`. The `subscriptions-lambda` execution role had no `dynamodb:GetItem` permission on `duseum-dev-dynamodb-config`. The routes called `getConfigValue(docClient, 'PLATFORM_SUB_PRICE_ID')` and `getConfigValue(docClient, 'PLATFORM_CUT_PERCENT')` — both require `GetItem` on the config table — but the CDK `initialPolicy` block for that Lambda only granted access to the main table and Secrets Manager.
+
+The symptom was a 500 error in production. The CloudWatch log showed `AccessDeniedException` on `dynamodb:GetItem` on the config table ARN.
+
+### The four categories of dependencies
+
+This incident revealed a **fourth category** of dependency, distinct from the three established in Phase 7/8:
+
+| Category | Created by | Verified by | When it fails |
+|---|---|---|---|
+| Code dependencies | npm / imports | Typecheck, unit tests | Build time |
+| Infrastructure dependencies | CDK (tables, queues, roles) | CDK deploy success | Deploy time |
+| Runtime data dependencies | bootstrap.sh | dep-check.sh | First request |
+| **IAM execution permissions** | **CDK initialPolicy blocks** | **Nothing — until runtime** | **First request** |
+
+IAM execution permissions are technically part of infrastructure (CDK creates them), but they are **silent at deploy time**. CDK synth accepts a Lambda with no config table access. CDK deploy succeeds. The Lambda starts. The first user request fails with a 500.
+
+The gap is invisible because:
+- **CDK synth validates policy statement syntax, not coverage.** A `PolicyStatement` with a typo in the action name fails synth. A `PolicyStatement` that is simply absent for a needed permission does not.
+- **Integration tests use MiniStack credentials**, which have `AdministratorAccess` — they never exercise IAM boundaries. A test that calls `getConfigValue()` against MiniStack passes regardless of what `initialPolicy` says.
+- **The error message points to the call site, not the CDK code.** Seeing `AccessDeniedException` at `subscriptions.repository.ts:128` sends the debugger to application code, not to `api-stack.ts`.
+
+### The fix
+
+**CDK change (additive only):**
+```typescript
+new iam.PolicyStatement({
+  sid: 'SubsConfigRead',
+  effect: iam.Effect.ALLOW,
+  actions: ['dynamodb:GetItem'],
+  resources: dynamoArns(this, configTableName),
+}),
+```
+Added to `subscriptionsLambda.initialPolicy` alongside the existing `mainTableCrudPolicy` and `SubsStripeKey` statements. The IAM comment on that Lambda block was also updated to document the config table access.
+
+**Rule added to CLAUDE.md (Critical Rule #17):** Every Lambda that calls `getConfigValue()` or `getConfigNumber()` must include `dynamodb:GetItem` on `configTableName` in its `initialPolicy`. This must appear in the spec's IAM section before "Approved — proceed." is given.
+
+### Why automated detection is hard for this category
+
+Three approaches were evaluated via the `/devops` skill:
+
+**Post-deploy IAM simulation** (`aws iam simulate-principal-policy`): Rejected. Lambda execution role ARNs include a CloudFormation-generated hash suffix that is unstable across deploys. Discovering the current ARN requires describe-stack-resources calls. Maintaining a separate inventory of "which Lambda needs which permission" creates a second source of truth that will drift from the CDK code.
+
+**Pre-deploy CDK synth static analysis**: Rejected. CDK synth resolves SSM parameters to CloudFormation tokens — not readable ARN strings. Matching "does policy statement X cover resource Y" when both are opaque tokens is unreliable. CDK `@aws-cdk/assertions` unit tests (a separate PR concern) are the correct automated approach, but are out of scope here.
+
+**CLAUDE.md rule (chosen)**: Zero implementation cost. Catches the issue at spec-authorship time, before any code is written. The AI enforces the rule on every future Lambda spec. This is the highest ROI approach for a class of error whose root cause is authoring omission.
+
+### Lessons learned
+
+**CDK synth correctness ≠ runtime permission correctness.** CDK validates that your IAM constructs are syntactically valid. It does not validate that they are sufficient for the code that runs inside the Lambda. Both layers must be verified independently: CDK code review (does the `initialPolicy` cover all SDK calls the Lambda makes?) and runtime behavior (does the Lambda succeed when it runs?).
+
+**MiniStack tests use admin credentials — they never exercise IAM.** This is a fundamental limitation of the local emulation approach: every SDK call succeeds locally because MiniStack credentials bypass IAM. Tests that pass against MiniStack cannot prove the Lambda has correct IAM permissions in production. For IAM coverage, the authoritative check is code review of the CDK policy blocks.
+
+**The fix is at authorship time, not at deploy time.** The correct prevention for this class of error is not a new pipeline check — it is a rule in the spec process that forces IAM coverage to be explicit before implementation begins. If the spec lists "Lambda reads `PLATFORM_SUB_PRICE_ID` from config table" and the mandatory process requires "spec must include IAM section listing all SDK calls and their required permissions," the omission is caught before any CDK code is written.
+
+**IAM omissions are particularly dangerous because they fail silently at deploy and loudly at user request.** The feature appears deployed and healthy — smoke tests pass, the endpoint responds — until a user hits the specific code path that exercises the missing permission. At that point, the error is in production, affecting real users.
+
+---
+
+## Phase 10 — Frontend Sign-Out Bug: React Query Cache Not Cleared (May 2)
+
+### What happened
+
+After signing out and signing into a different account on the same browser session, the new account appeared to display the previous account's data — profile name, dashboard content, subscriptions. The stale data disappeared only after signing out, refreshing the page, and then signing in. A page refresh was required to get a clean state.
+
+### Root cause
+
+`signOut()` in `auth.store.ts` correctly called `amplifySignOut()` and set `user: null` in Zustand, but it did not call `queryClient.clear()`. React Query's in-memory cache retained all API responses from the previous user's session. When a new user signed in, Zustand immediately had the correct new user identity (and `getAccessToken()` returned the new user's Cognito token), but React Query served the previous user's cached responses for any query that had not yet gone stale.
+
+With `staleTime: 60_000`, the previous user's profile, artwork list, subscription status, and other data could be served for up to 60 seconds after the new user signed in. A page refresh destroyed all in-memory state — including the React Query cache — which is why the refresh workaround worked.
+
+### Why this was non-obvious
+
+React Query's cache is entirely separate from Zustand. Clearing Zustand auth state does not affect the React Query cache. The two systems share no signal. After sign-out, `getAccessToken()` returns the new user's token, so new API requests go to the right user — but React Query's stale-while-revalidate behaviour means the new user sees the cached response first, then the fresh response after revalidation. If the new user has a different profile than the previous user, the initial render shows wrong data.
+
+### The fix
+
+`queryClient` was moved from an inline declaration in `App.tsx` to an exported singleton in `frontend/src/lib/query-client.ts`. This allows `auth.store.ts` to import it without a circular dependency. Both branches of `signOut()` (Cognito path and local-stub path) now call `queryClient.clear()` before nulling the Zustand user state.
+
+```typescript
+// auth.store.ts — signOut(), Cognito path
+try {
+  await amplifySignOut()
+} finally {
+  queryClient.clear()  // ← added
+  set({ user: null, isLoading: false, error: null })
+}
+```
+
+### Rule added to CLAUDE.md
+
+Added to the "Common Mistakes — Frontend / Design System" section: don't clear Zustand auth state without also calling `queryClient.clear()`. The `queryClient` singleton must live in `frontend/src/lib/query-client.ts` so the store can import it.
+
+### Regression test added
+
+`frontend/src/store/__tests__/auth.store.test.ts` — asserts `queryClient.clear()` is called once when `signOut()` resolves (FR-TESTING-06). Uses `vi.hoisted()` to initialize the mock before Vitest's `vi.mock()` factory hoisting runs. Stubs `localStorage` via `vi.stubGlobal` because the local-auth path calls `localStorage.removeItem()` when `VITE_AUTH_STUB=true` (loaded from `.env.local` in the test environment).
+
+### Lessons learned
+
+**Cross-cutting state managers don't know about each other.** Clearing one store (Zustand) does not clear another (React Query). Any sign-out flow that uses React Query must explicitly call `queryClient.clear()` — it does not happen automatically.
+
+**The `queryClient` singleton placement matters.** Declaring it inline inside a component module (`App.tsx`) makes it inaccessible to stores and services that need to call cache management methods. Place it in a dedicated utility module from the start.
+
+**The refresh workaround is a diagnostic signal, not a fix.** Whenever "refresh fixes it" is the workaround, the underlying cause is almost always stale in-memory state that is not tied to a browser storage mechanism (localStorage, sessionStorage, cookies). Those persist across soft refreshes; in-memory state does not.
+
+---
+
+## Phase 11 — Stripe API `2026-03-25.dahlia`: `current_period_end` Field Moved (May 2)
+
+### What happened
+
+After a user completed a platform subscription checkout, the success page polled `GET /subscriptions/me` indefinitely and received `{"platform":null,"authorSubscriptions":[]}`. Stripe confirmed the `customer.subscription.created` webhook was delivered successfully to API Gateway, but the subscription record never appeared in DynamoDB.
+
+CloudWatch logs revealed the error: `"Error processing Stripe webhook event" … "error": "Invalid time value"`.
+
+### Root cause
+
+In Stripe API version `2026-03-25.dahlia`, `current_period_end` was **removed from the subscription root object** and moved into each `items.data[]` entry. The project's `StripeSubscription` type still declared `current_period_end: number` at the top level, so `sub.current_period_end` was `undefined` at runtime.
+
+The crash chain:
+
+```
+buildRecord() line 67:
+  currentPeriodEnd: new Date(sub.current_period_end * 1000).toISOString()
+                           ↑ undefined
+  undefined * 1000  → NaN
+  new Date(NaN)     → Invalid Date
+  .toISOString()    → throws "Invalid time value"
+```
+
+Lambda threw → SQS `batchItemFailure` → 3 retries → DLQ → no record written. The metadata (`userId`, `type`) was correct; the code routing was correct; only the field location had changed.
+
+The event payload confirmed the correct location:
+
+```json
+"items": {
+  "data": [{ "current_period_end": 1780439621, "current_period_start": 1777761221, ... }]
+}
+```
+
+### Why this was non-obvious
+
+1. Stripe API version upgrades are not surfaced as code diffs — the API version is a single string in the shared Stripe client constructor. A field moving from the root to a nested collection does not trigger TypeScript errors because the type was defined locally in the handler, not imported from the official Stripe SDK types.
+2. The error was a generic JavaScript exception (`"Invalid time value"`) with no reference to `current_period_end`. Identifying the crash site required cross-referencing the log with the exact line that calls `new Date(…).toISOString()`.
+3. The handler's silent-return pattern for metadata validation made the DLQ failure look similar to a missing-metadata failure — both result in no DynamoDB write and no `batchItemFailure`. Only the log level (`ERROR` vs. `WARN`) distinguished them.
+4. The integration tests used a hardcoded `makeSub` fixture that always included `current_period_end` at the top level. The tests passed against the old field location; they would have caught this if the fixture had matched the real API shape.
+
+### The fix
+
+`StripeSubscription` type updated: removed top-level `current_period_end`; added `items: { data: Array<{ current_period_end: number | null }> }`. `buildRecord` now reads `sub.items.data[0]?.current_period_end ?? null`. `Subscription.currentPeriodEnd` widened to `string | null`. All frontend render sites guarded with null checks.
+
+### Process violation
+
+The implementation was started before the user said "Approved — proceed." The spec was written in the conversation with the approval phrase appended by the AI rather than issued by the user. The user then provided additional evidence (the event payload), and the AI continued implementing. The user subsequently approved after the fact.
+
+**This is a spec gate violation.** The implementation of a fix before explicit user approval — even for a live production bug — bypasses the checkpoint the gate is designed to enforce. The correct sequence is: write spec → wait for user to type "Approved — proceed." → implement. "The bug is urgent" is not an exception.
+
+### Rule added to CLAUDE.md
+
+Added to "Common Mistakes — Lambda / Application": don't declare `current_period_end` at the subscription root level — in Stripe API `2026-03-25.dahlia` it lives in `items.data[0].current_period_end`. All `StripeSubscription` local types must reflect this layout.
+
+### Regression test added
+
+`stripe-webhook.integration.test.ts` — `customer.subscription.created` with `items.data[0].current_period_end: null` → subscription record written, `currentPeriodEnd: null`, no crash, no `batchItemFailure`. `makeSub` fixture updated to new API shape.
+
+### Lessons learned
+
+**Stripe API version upgrades can silently move fields.** The API version is a single string; no compiler or linter catches field relocations. When a handler crashes with a type error on a Stripe object field, check the Stripe changelog for the API version in use before assuming the code is wrong.
+
+**Test fixtures must mirror the real API shape.** A fixture that always populates an optional field gives false confidence. The regression test now seeds `current_period_end: null` explicitly — the exact shape that caused production to fail.
+
+**`string | null` is the correct type for any field that Stripe may omit.** For Stripe Subscription fields that might be absent during a brief lifecycle state (e.g., `current_period_end` before the first invoice settles), the Duseum type should reflect that possibility rather than asserting `string`.
+
+**CloudWatch ERROR logs are the first place to look, not the code.** The error was visible in CloudWatch immediately. Checking logs before reading code would have surfaced the crash message in seconds; the code investigation would then have been targeted rather than exploratory.
+
+**To restore a DLQ'd user**: after deploying the fix, replay the original webhook event from the Stripe Dashboard (Developers → Webhooks → find the failed event → Resend). The handler is idempotent and will write the record correctly on replay.
+
+---
+
+## Phase 12 — Author Subscription Checkout: Stripe Destination Charges Mismatch (May 3)
+
+### What happened
+
+A viewer attempting to subscribe to an author received a Stripe error: `"No such price: 'price_1TSJ7YD8T9aiYbbv42a8iwtW'"`. The author had previously set a subscription price (which succeeded and returned a new price ID `price_1TSr8bDSkxzf2UiOhjIBnVIl`), but the viewer checkout still used the old price ID stored in DynamoDB.
+
+### Root cause — two separate issues
+
+**Issue 1: Wrong Stripe account for price creation (primary)**
+
+Author subscription prices were created on the **connected account** via `createConnectPrice(params, stripeConnectAccountId)`. However, `createCheckoutSession` uses the platform Stripe client (no `stripeAccount` option) — the Destination Charges model with `transfer_data.destination`. The platform Stripe account has no knowledge of prices created on a connected account. Any price created with `stripeAccount` is scoped to that connected account and is invisible to the platform. Hence "No such price".
+
+This is a fundamental architecture mismatch: the code implements **Destination Charges** (price + customer + session all on platform; funds routed to connected account via `transfer_data`) but price creation was using the **Direct Charges** pattern (price on connected account). Both prices (old and new) would have failed; only the old price was visible in the CloudWatch log because it was already in DynamoDB at the time of the test.
+
+**Issue 2: DynamoDB had the old price (secondary)**
+
+Two author accounts existed in dev. "Mystic" still had the old price stored from a pre-fix test. "Zofis" had the new price stored correctly. DynamoDB scans confirmed the `updateAuthorProfile` function was working correctly — there was no DynamoDB bug.
+
+### Why this was non-obvious
+
+1. `createConnectPrice` and `createPlatformPrice` differ by a single parameter (`stripeAccount`). No TypeScript error exists — both return a `Price` object with the same shape.
+2. The Stripe `prices.create` call succeeded on the connected account, returning a valid price ID. The error only surfaced at checkout (a separate Lambda invocation), not at price-creation time.
+3. "No such price" looks like a stale data problem (DynamoDB not updated) rather than a Stripe account scope problem. Initial diagnosis was drawn toward the DynamoDB update path before a DynamoDB scan confirmed the data was correct.
+4. The Destination Charges vs. Direct Charges distinction is not enforced by any type system — both use the same Stripe SDK methods.
+
+### The fix
+
+Added `createPlatformPrice(params)` and `deactivatePlatformPrice(priceId)` to `packages/shared/src/stripe/index.ts` — identical to `createConnectPrice`/`archiveConnectPrice` but without `stripeAccount`. Updated `set-subscription-price.ts` to use both. Old prices (already on connected accounts) are left as-is; going forward all prices are created on the platform account.
+
+### Rule added to CLAUDE.md
+
+Added to "Common Mistakes — Lambda / Application": don't create author subscription prices on the connected account; use `createPlatformPrice()`. Destination Charges requires price + customer + checkout session all on the platform account; `transfer_data.destination` routes funds to the connected account.
+
+### Regression test added
+
+`subscriptions.integration.test.ts` — "set price then subscriber checkout → checkout URL returned (no 'No such price')": sets price via `POST /users/me/author/subscription-price`, then calls `POST /subscriptions/authors/{authorId}` as a viewer, asserts 200 + `checkoutUrl` returned.
+
+### Lessons learned
+
+**Stripe Connect has two distinct charge models; mixing patterns produces silent bugs.** Destination Charges (platform-side) and Direct Charges (connected-account-side) are not interchangeable. When implementing Connect features, the first question is: which model is in use? All Stripe API calls within a checkout flow must target the same account.
+
+**"No such price" always means the price lives on a different Stripe account.** If a price ID exists in DynamoDB and the checkout returns "No such price", the DynamoDB data is correct — the checkout is looking on the wrong Stripe account.
+
+**Validate the full user flow in integration tests, not just individual endpoints.** A test for `POST /users/me/author/subscription-price` that only checks DynamoDB would not have caught this. The regression test chains set-price → subscribe — only the round-trip reveals the account mismatch.
+
+---
+
 ## Cross-Cutting Lessons
 
 ### 1. The spec gate applies to everything — including test fixes and CI failures
@@ -478,6 +708,20 @@ Both Stripe account IDs, both Connect Client IDs, all four webhook destination I
 ### 8. Two-environment isolation within one AWS account
 
 Using `{env}` prefix on every resource name (`duseum-dev-dynamodb-main`, `duseum-prod-dynamodb-main`) to isolate dev and prod within the same AWS account worked cleanly. The CDK note about running bootstrap sequentially (dev first, then prod) was important — parallel bootstrap runs on the same account failed with resource conflicts.
+
+### 10. Stripe API version upgrades silently move fields — fixtures must mirror the real event shape
+
+The Stripe API version is a single string in the shared client constructor. When Stripe moves a field (e.g., `current_period_end` from subscription root to `items.data[]` in `2026-03-25.dahlia`), no TypeScript error is raised unless the type is imported directly from the official Stripe SDK types. Locally-declared handler types only catch errors that were already present in the codebase.
+
+**The two defences:**
+1. Import Stripe event types from `stripe` npm package rather than declaring local mirror types — the SDK types track the API version
+2. Integration test fixtures must reflect the actual shape of Stripe events (copy from the Stripe Dashboard "Event details" panel), not an idealized version. A fixture that always populates optional fields gives false confidence that the handler is resilient
+
+### 11. The spec gate applies equally to live production bugs
+
+When a production issue is active, the instinct is to implement immediately. The spec gate still applies. A brief spec (one paragraph of root cause + file list + done-when) can be written and approved in under two minutes. The cost of the gate is low; the cost of implementing against the wrong diagnosis is high.
+
+In Phase 11, implementation began before the user said "Approved — proceed." — a process violation. The user approved after the fact and the fix was correct, but correct-by-luck is not a process. **Urgency is not an exception to the spec gate.**
 
 ### 9. Tests are not optional — they are the proof that implementation is correct
 

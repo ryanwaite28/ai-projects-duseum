@@ -86,7 +86,7 @@ export const WeeklyFeaturedCarousel = ({ data, isLoading }: WeeklyFeaturedCarous
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data?.isoWeek],
   )
-  const slots = Array.from({ length: 10 }, (_, i) => shuffledAuthors[i] as WeeklyFeaturedAuthor | undefined)
+  const slots = Array.from({ length: data?.slotsTotal ?? 3 }, (_, i) => shuffledAuthors[i] as WeeklyFeaturedAuthor | undefined)
 
   const weekLabel = data
     ? `${data.weekStartDate} – ${data.weekEndDate}`
@@ -110,7 +110,7 @@ export const WeeklyFeaturedCarousel = ({ data, isLoading }: WeeklyFeaturedCarous
             <span className="text-[0.78rem] text-stone-light font-light opacity-70">
               {isLoading
                 ? '…'
-                : `${data?.slotsFilled ?? 0} / ${data?.slotsTotal ?? 10} slots filled`}
+                : `${data?.slotsFilled ?? 0} / ${data?.slotsTotal ?? 3} slots filled`}
             </span>
           </div>
         </div>
@@ -118,7 +118,7 @@ export const WeeklyFeaturedCarousel = ({ data, isLoading }: WeeklyFeaturedCarous
         {/* Horizontal scroll row */}
         <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide">
           {isLoading
-            ? Array.from({ length: 10 }).map((_, i) => (
+            ? Array.from({ length: data?.slotsTotal ?? 3 }).map((_, i) => (
                 <div key={i} className="flex-shrink-0 w-52 animate-pulse">
                   <div className="aspect-[4/5] bg-ink-soft border border-gold/10 rounded-sm mb-3" />
                   <div className="h-3 bg-ink-soft rounded-sm w-3/4 mb-2" />

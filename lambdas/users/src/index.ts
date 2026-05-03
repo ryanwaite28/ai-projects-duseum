@@ -64,7 +64,7 @@ const dispatch = async (
 
   // /authors routes
   if (method === 'GET'  && path === '/authors')                        return listAuthors(event)
-  if (method === 'GET'  && authorId && path.endsWith('/collections'))  return getAuthorCollections(authorId)
+  if (method === 'GET'  && authorId && path.endsWith('/collections'))  return getAuthorCollections(event, context, authorId)
   if (method === 'GET'  && authorId)                                   return getAuthor(event, authorId)
 
   // /follows routes

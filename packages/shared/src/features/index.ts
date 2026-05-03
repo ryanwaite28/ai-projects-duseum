@@ -125,13 +125,41 @@ export const getWeekBounds = (
  * Returns an ordered array of ISO week strings that an Author may book,
  * starting from the current week through `advanceWeeks` weeks ahead (FR-FEAT-14).
  *
- * @param advanceWeeks - How many weeks ahead to allow beyond the current week (default 8); total options = advanceWeeks + 1
+ * On Sundays (UTC) the current week is excluded — it has < 24 hours remaining
+ * and would give the Author almost no featured time. Bookings for the current
+ * week are only accepted Monday through Saturday.
+ *
+ * @param advanceWeeks - How many weeks ahead to allow beyond the current week
+ * @param now          - Reference date (injectable for testing; defaults to new Date())
  */
-export const getEligibleWeeks = (advanceWeeks: number): string[] => {
-  const current = getCurrentIsoWeek()
+export const getEligibleWeeks = (advanceWeeks: number, now: Date = new Date()): string[] => {
+  const current = getIsoWeekForDate(now)
+  // Sunday (UTC day 0): skip current week — it ends at midnight going into Monday
+  const startIndex = now.getUTCDay() === 0 ? 1 : 0
   const weeks: string[] = []
-  for (let i = 0; i <= advanceWeeks; i++) {
+  for (let i = startIndex; i <= advanceWeeks; i++) {
     weeks.push(addWeeks(current, i))
   }
   return weeks
+}
+
+/**
+ * Returns true when a just-confirmed payment for a weekly feature booking
+ * should immediately transition the booking to ACTIVE.
+ *
+ * Activates immediately only when the booking targets the current ISO week.
+ * Bookings for future weeks remain CONFIRMED until the Monday rotation promotes
+ * them. The Sunday booking block in `getEligibleWeeks` means new same-week
+ * bookings cannot be created on Sundays; however, if a booking created earlier
+ * in the week has payment confirmed on Sunday, it is still activated immediately
+ * since the booking was legitimately placed.
+ *
+ * @param bookingIsoWeek - The ISO week the booking is for
+ * @param now            - Reference date (injectable for testing; defaults to new Date())
+ */
+export const shouldActivateImmediately = (
+  bookingIsoWeek: string,
+  now: Date = new Date()
+): boolean => {
+  return bookingIsoWeek === getIsoWeekForDate(now)
 }

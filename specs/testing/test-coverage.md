@@ -84,6 +84,25 @@
 | ProtectedRoute | ProtectedRoute.test.tsx | loading spinner, unauth redirect, children rendered | ✅ |
 | AdminRoute | AdminRoute.test.tsx | auth loading, me loading, unauth redirect, non-ADMIN→403, ADMIN renders children | ✅ |
 
+### Zustand Store Regression Tests
+
+| Store | Test file | What is covered | Status |
+|---|---|---|---|
+| auth.store.ts | auth.store.test.ts | `signOut()` calls `queryClient.clear()` before nulling user (FR-TESTING-06) | ✅ |
+
+### Transactional Email Tests — Gap Analysis (FR-NOTIF-12)
+
+> Tests for the email module (`specs/notifications/transactional-emails.md`) are not yet written.
+
+| Scope | What | Status |
+|---|---|---|
+| auth-triggers integration | `sendWelcomeEmail` fired after PostConfirmation | ❌ |
+| subscriptions-webhook integration | `sendPlatformSubStartedEmail` + admin notif on PLATFORM created | ❌ |
+| subscriptions-webhook integration | `sendAuthorSubStartedViewerEmail` + author email on AUTHOR_SUB created | ❌ |
+| subscriptions-webhook integration | `sendPlatformSubCanceledEmail` on PLATFORM deleted | ❌ |
+| subscriptions-webhook integration | `sendAuthorSubCanceledViewerEmail` + author email on AUTHOR_SUB deleted | ❌ |
+| account-events unit | `sendConnectOnboardingCompleteEmail` on charges_enabled false→true; not fired on true→true | ❌ |
+
 ---
 
 ## New/modified files
@@ -91,11 +110,14 @@
 ### Lambda integration tests
 - `lambdas/artworks/src/__tests__/artwork-mutations.integration.test.ts` — `PUT /artworks/{id}`, `DELETE /artworks/{id}` (soft + permanent), `GET /artworks/mine`
 - `lambdas/features/src/__tests__/weekly-and-bookings.integration.test.ts` — `GET /features/weekly`, `GET /features/weekly/my-bookings`
-- `lambdas/subscriptions/src/__tests__/subscriptions.integration.test.ts` — extended with `GET /subscriptions/me/subscribers`
+- `lambdas/subscriptions/src/__tests__/subscriptions.integration.test.ts` — extended with `GET /subscriptions/me/subscribers`; mock updated `createConnectPrice` → `createPlatformPrice` + `deactivatePlatformPrice`; regression test added: set price → subscriber checkout → "No such price" fix (Destination Charges mismatch)
+- `lambdas/users/src/__tests__/users.integration.test.ts` — extended: `GET /authors/{authorId}/collections` — owner (JWT sub === authorId) sees FREE + SUBSCRIBER_ONLY; non-owner / unauthenticated sees FREE only; 404 for nonexistent author
 - `lambdas/subscriptions/src/__tests__/setup.ts` — added `GSI-SubscribersByAuthor` to table definition
+- `lambdas/subscriptions-webhook/src/__tests__/stripe-webhook.integration.test.ts` — extended: current-week `payment_intent.succeeded` → immediately ACTIVE; past-week → CONFIRMED; test description clarified; `makeSub` fixture updated to Stripe API `2026-03-25.dahlia` shape (`items.data[]`); regression test for `current_period_end: null` → `currentPeriodEnd: null` written, no crash
+- `lambdas/maintenance/src/__tests__/weekly-rotation.integration.test.ts` — extended: safety-net test for CONFIRMED previous-week → ARCHIVED
 
 ### Frontend service unit tests
-- `frontend/src/services/__tests__/artworks.service.test.ts`
+- `frontend/src/services/__tests__/artworks.service.test.ts` — extended with `listMyArtworks` tests (GET /artworks/mine, limit/cursor params, PRIVATE artworks in response)
 - `frontend/src/services/__tests__/features.service.test.ts`
 - `frontend/src/services/__tests__/follows.service.test.ts`
 - `frontend/src/services/__tests__/social.service.test.ts`
@@ -114,10 +136,19 @@
 - `frontend/src/test/test-utils.tsx` — shared render wrapper (QueryClientProvider + MemoryRouter)
 - `frontend/src/test/setup.ts` — updated: patches `window.location` to silence jsdom navigation warnings
 
+### Shared package unit tests
+- `packages/shared/src/features/iso-week.test.ts` — extended: `getEligibleWeeks` tests use deterministic `MONDAY`/`SUNDAY` fixtures; Sunday blocking tests added; `shouldActivateImmediately` test suite added
+
+### Zustand store regression tests
+- `frontend/src/store/__tests__/auth.store.test.ts` — FR-TESTING-06: `signOut()` clears React Query cache
+
 ### Project docs
 - `PROJECT.md` — FR-TESTING-05 broadened; Section 15.5 expanded with component test pattern
+- `PROJECT.md` — FR-FEAT-08/10/12/14/15/17 updated; slot count default corrected to 3; immediate-ACTIVE lifecycle; Sunday booking block; safety-net rotation step; GSI deduplication
 - `CLAUDE.md` — component tests added as distinct testing layer with pattern guidance
-- `specs/testing/test-coverage.md` — component coverage table added
+- `specs/features/weekly-booking.md` — business logic updated for immediate-ACTIVE, Sunday block, GSI dedup, slotsTotal from API
+- `specs/features/maintenance-rotation.md` — three-step rotation described; safety-net done-when item added
+- `specs/testing/test-coverage.md` — new test coverage entries added
 
 ---
 
@@ -128,5 +159,6 @@
 - [x] FR-TESTING-03: every frontend service file has a unit test
 - [x] FR-TESTING-05: every significant component has a test file covering all rendering branches
 - [x] FR-TESTING-06: regression test for `followerCount.toLocaleString()` crash in `authors.service.test.ts`
+- [x] FR-TESTING-06: regression test for sign-out React Query cache not cleared in `auth.store.test.ts`
 - [x] FR-TESTING-07: idempotency test exists in `stripe-webhook.integration.test.ts`
 - [x] `specs/testing/test-coverage.md` gap table fully green

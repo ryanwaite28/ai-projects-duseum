@@ -45,6 +45,11 @@
 
 **IAM roles**: `duseum-lambda-{name}-role` with least-privilege policies (DynamoDB, SQS, SES, S3, Secrets Manager access as needed per Lambda)
 
+**`subscriptions-webhook` IAM additions** (see `specs/notifications/transactional-emails.md`):
+- `WebhookSes`: `ses:SendEmail`, `ses:SendRawEmail` on `*`
+- `WebhookSesFromSecret`: `secretsmanager:GetSecretValue` on `duseum/{env}/ses/from-address`
+- Env var added: `SES_ADMIN_ADDRESS = admin@duseum.com`
+
 **Tags**: all Lambda + API GW resources tagged `Project=duseum`, `Environment={env}`, `Stack=api`, `ManagedBy=CDK`
 
 **Tests to write**:

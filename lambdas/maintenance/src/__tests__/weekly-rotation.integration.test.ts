@@ -100,6 +100,17 @@ describe('weekly-rotation task', () => {
     expect(b3!.featureStatus).toBe('ACTIVE')
   })
 
+  it('archives CONFIRMED bookings from the previous week (safety net for late payments)', async () => {
+    const previousWeek = addWeeks(getCurrentIsoWeek(), -1)
+    await seedBooking('author-h', previousWeek, 'CONFIRMED', 'booking-h', '2024-12-30', '2025-01-05')
+
+    await handler(makeEventBridgeEvent(WEEKLY_RULE) as any)
+
+    const booking = await getBooking(previousWeek, 'author-h')
+    expect(booking).not.toBeNull()
+    expect(booking!.featureStatus).toBe('ARCHIVED')
+  })
+
   it('is a no-op when there are no bookings to process', async () => {
     // No seed — should complete without error
     await expect(

@@ -89,7 +89,7 @@ export type Subscription = {
   stripeCustomerId: string
   // PAUSED added per CLAUDE.md: customer.subscription.paused → PAUSED status
   status: 'ACTIVE' | 'PAST_DUE' | 'CANCELLED' | 'INCOMPLETE' | 'PAUSED'
-  currentPeriodEnd: string    // ISO 8601
+  currentPeriodEnd: string | null  // ISO 8601; null briefly on creation before first subscription.updated
   createdAt: string
 }
 

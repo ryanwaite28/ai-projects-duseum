@@ -457,3 +457,102 @@ describe('GET /users/{userId}/profile', () => {
     expect(res.statusCode).toBe(404)
   })
 })
+
+// ── GET /authors/{authorId}/collections ──────────────────────────────────────
+//
+// Owner (JWT sub === authorId) → all visibility tiers returned
+// Non-owner / unauthenticated → FREE only
+//
+describe('GET /authors/{authorId}/collections', () => {
+  const COLL_AUTHOR = 'coll-author-001'
+
+  const seedCollection = async (
+    collectionId: string,
+    visibility: 'FREE' | 'SUBSCRIBER_ONLY'
+  ) => {
+    const createdAt = new Date().toISOString()
+    // Author-index stub
+    await seedItem({
+      PK: `AUTHOR#${COLL_AUTHOR}`,
+      SK: `COLLECTION#${createdAt}#${collectionId}`,
+      collectionId,
+      authorId: COLL_AUTHOR,
+      visibility,
+      createdAt,
+    })
+    // Full collection metadata
+    await seedItem({
+      PK: `COLLECTION#${collectionId}`,
+      SK: 'METADATA',
+      collectionId,
+      authorId: COLL_AUTHOR,
+      title: `${visibility} Collection`,
+      description: '',
+      visibility,
+      pieceCount: 0,
+      createdAt,
+      updatedAt: createdAt,
+    })
+  }
+
+  it('owner (JWT sub === authorId) sees both FREE and SUBSCRIBER_ONLY collections', async () => {
+    await seedAuthorProfile(COLL_AUTHOR)
+    await seedCollection('col-free-001',   'FREE')
+    await seedCollection('col-sub-001',    'SUBSCRIBER_ONLY')
+
+    const event = makeEvent('GET', `/authors/${COLL_AUTHOR}/collections`, {
+      userId: COLL_AUTHOR,
+      pathParameters: { authorId: COLL_AUTHOR },
+    })
+    const res = await handler(event as never, makeCtx())
+
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body!)
+    expect(body.items).toHaveLength(2)
+    const visibilities = body.items.map((c: { visibility: string }) => c.visibility)
+    expect(visibilities).toContain('FREE')
+    expect(visibilities).toContain('SUBSCRIBER_ONLY')
+  })
+
+  it('non-owner (different user JWT) sees FREE collections only', async () => {
+    await seedAuthorProfile(COLL_AUTHOR)
+    await seedCollection('col-free-002',  'FREE')
+    await seedCollection('col-sub-002',   'SUBSCRIBER_ONLY')
+
+    const event = makeEvent('GET', `/authors/${COLL_AUTHOR}/collections`, {
+      userId: 'some-other-user',
+      pathParameters: { authorId: COLL_AUTHOR },
+    })
+    const res = await handler(event as never, makeCtx())
+
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body!)
+    const visibilities = body.items.map((c: { visibility: string }) => c.visibility)
+    expect(visibilities.every((v: string) => v === 'FREE')).toBe(true)
+    expect(visibilities).not.toContain('SUBSCRIBER_ONLY')
+  })
+
+  it('unauthenticated request sees FREE collections only', async () => {
+    await seedAuthorProfile(COLL_AUTHOR)
+    await seedCollection('col-free-003',  'FREE')
+    await seedCollection('col-sub-003',   'SUBSCRIBER_ONLY')
+
+    const event = makeEvent('GET', `/authors/${COLL_AUTHOR}/collections`, {
+      pathParameters: { authorId: COLL_AUTHOR },
+    })
+    const res = await handler(event as never, makeCtx())
+
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body!)
+    const visibilities = body.items.map((c: { visibility: string }) => c.visibility)
+    expect(visibilities.every((v: string) => v === 'FREE')).toBe(true)
+  })
+
+  it('returns 404 for non-existent author', async () => {
+    const event = makeEvent('GET', '/authors/nonexistent-author/collections', {
+      pathParameters: { authorId: 'nonexistent-author' },
+    })
+    const res = await handler(event as never, makeCtx())
+    expect(res.statusCode).toBe(404)
+  })
+})

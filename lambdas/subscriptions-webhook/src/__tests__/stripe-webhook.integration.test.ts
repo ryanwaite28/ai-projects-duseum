@@ -16,6 +16,7 @@ import {
   seedItem,
   getItem,
 } from './setup.js'
+import { getCurrentIsoWeek } from '@duseum/shared'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 // vi.mock is hoisted to the top of the file by Vitest before any imports run.
@@ -47,11 +48,15 @@ import { handler } from '../index.js'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
+// Stripe API 2026-03-25.dahlia: current_period_end moved from subscription root
+// into items.data[]. Top-level field no longer exists.
 const makeSub = (overrides: Record<string, unknown> = {}) => ({
   id: 'sub_test_001',
   customer: 'cus_test_001',
   status: 'active',
-  current_period_end: Math.floor(Date.now() / 1000) + 86400 * 30,
+  items: {
+    data: [{ current_period_end: Math.floor(Date.now() / 1000) + 86400 * 30 }],
+  },
   metadata: { userId: 'user-001', type: 'PLATFORM' },
   ...overrides,
 })
@@ -164,7 +169,23 @@ describe('subscriptions-webhook handler', () => {
 
   // ── payment_intent events (WeeklyFeature) ─────────────────────────────────
 
-  it('payment_intent.succeeded → confirms WEEKLY_FEATURE booking', async () => {
+  // ── regression: Stripe API 2026-03-25.dahlia ─────────────────────────────
+
+  it('customer.subscription.created with null current_period_end in items → writes record, currentPeriodEnd null (regression: Stripe 2026-03-25.dahlia)', async () => {
+    const raw = makeStripeEvent('evt_rg_001', 'customer.subscription.created', makeSub({
+      id: 'sub_rg_001',
+      items: { data: [{ current_period_end: null }] },
+    }))
+    const result = await handler(makeSqsEvent(raw) as never)
+
+    expect(result.batchItemFailures).toHaveLength(0)
+    const item = await getItem(MAIN_TABLE, { PK: 'USER#user-001', SK: 'SUB#PLATFORM' })
+    expect(item).not.toBeNull()
+    expect(item?.status).toBe('ACTIVE')
+    expect(item?.currentPeriodEnd).toBeNull()
+  })
+
+  it('payment_intent.succeeded for a past week → sets status CONFIRMED (awaits Monday rotation)', async () => {
     await seedBooking()
     await seedBookingAuthorKey()
 
@@ -174,6 +195,45 @@ describe('subscriptions-webhook handler', () => {
     expect(result.batchItemFailures).toHaveLength(0)
     const item = await getItem(MAIN_TABLE, { PK: 'FEATURE#WEEK#2026-W16', SK: 'AUTHOR#author-001' })
     expect(item?.featureStatus).toBe('CONFIRMED')
+  })
+
+  it('payment_intent.succeeded for the current week → immediately activates WEEKLY_FEATURE booking', async () => {
+    const currentWeek = getCurrentIsoWeek()
+    await seedItem(MAIN_TABLE, {
+      PK:            `FEATURE#WEEK#${currentWeek}`,
+      SK:            'AUTHOR#author-current',
+      isoWeek:       currentWeek,
+      authorId:      'author-current',
+      featureStatus: 'PENDING',
+      bookedAt:      new Date().toISOString(),
+    })
+    await seedItem(MAIN_TABLE, {
+      PK:            'AUTHOR#author-current',
+      SK:            `FEATURE#WEEK#${currentWeek}`,
+      isoWeek:       currentWeek,
+      authorId:      'author-current',
+      featureStatus: 'PENDING',
+      bookedAt:      new Date().toISOString(),
+    })
+
+    const raw = makeStripeEvent('evt_008b', 'payment_intent.succeeded', {
+      id: 'pi_current',
+      metadata: {
+        type:      'WEEKLY_FEATURE',
+        isoWeek:   currentWeek,
+        authorId:  'author-current',
+        bookingId: 'booking-current',
+      },
+    })
+    const result = await handler(makeSqsEvent(raw) as never)
+
+    expect(result.batchItemFailures).toHaveLength(0)
+    const item = await getItem(MAIN_TABLE, {
+      PK: `FEATURE#WEEK#${currentWeek}`,
+      SK: 'AUTHOR#author-current',
+    })
+    expect(item?.featureStatus).toBe('ACTIVE')
+    expect(item?.activatedAt).toBeDefined()
   })
 
   it('payment_intent.payment_failed → cancels WEEKLY_FEATURE booking', async () => {
@@ -286,6 +346,67 @@ describe('subscriptions-webhook handler', () => {
     }
     const result = await handler(event as never)
     expect(result.batchItemFailures).toHaveLength(1)
+  })
+
+  // ── subscriberCount counter ───────────────────────────────────────────────
+
+  it('customer.subscription.created with AUTHOR_SUB → increments subscriberCount on author profile', async () => {
+    const authorId = 'author-sub-count-001'
+    const userId   = 'user-sub-count-001'
+
+    // Seed minimal author profile (subscriberCount starts at 0 implicitly — ADD initialises to 0)
+    await seedItem(MAIN_TABLE, {
+      PK: `USER#${authorId}`, SK: 'PROFILE#AUTHOR',
+      userId, profileType: 'AUTHOR', displayName: 'Sub Counter Author',
+    })
+
+    const raw = makeStripeEvent('evt_sc_001', 'customer.subscription.created', makeSub({
+      metadata: { userId, type: 'AUTHOR_SUB', authorId },
+    }))
+    await handler(makeSqsEvent(raw) as never)
+
+    const profile = await getItem(MAIN_TABLE, { PK: `USER#${authorId}`, SK: 'PROFILE#AUTHOR' })
+    expect(profile?.subscriberCount).toBe(1)
+  })
+
+  it('customer.subscription.deleted with AUTHOR_SUB (was ACTIVE) → decrements subscriberCount', async () => {
+    const authorId = 'author-sub-count-002'
+    const userId   = 'user-sub-count-002'
+
+    // Seed author profile with subscriberCount = 1 (pre-existing active subscriber)
+    await seedItem(MAIN_TABLE, {
+      PK: `USER#${authorId}`, SK: 'PROFILE#AUTHOR',
+      userId: authorId, profileType: 'AUTHOR', displayName: 'Sub Counter Author 2',
+      subscriberCount: 1,
+    })
+    // Seed existing ACTIVE subscription so the deleted handler knows to decrement
+    await seedItem(MAIN_TABLE, {
+      PK: `USER#${userId}`, SK: `SUB#AUTHOR#${authorId}`,
+      userId, targetId: authorId, status: 'ACTIVE',
+      stripeSubscriptionId: 'sub_sc_002', stripeCustomerId: 'cus_sc_002',
+      createdAt: new Date().toISOString(),
+    })
+
+    const raw = makeStripeEvent('evt_sc_002', 'customer.subscription.deleted', makeSub({
+      id: 'sub_sc_002', status: 'canceled',
+      metadata: { userId, type: 'AUTHOR_SUB', authorId },
+    }))
+    await handler(makeSqsEvent(raw) as never)
+
+    const profile = await getItem(MAIN_TABLE, { PK: `USER#${authorId}`, SK: 'PROFILE#AUTHOR' })
+    expect(profile?.subscriberCount).toBe(0)
+  })
+
+  it('customer.subscription.created with PLATFORM → does not change any author subscriberCount', async () => {
+    const raw = makeStripeEvent('evt_sc_003', 'customer.subscription.created', makeSub({
+      metadata: { userId: 'user-plat-001', type: 'PLATFORM' },
+    }))
+    const result = await handler(makeSqsEvent(raw) as never)
+
+    expect(result.batchItemFailures).toHaveLength(0)
+    // No author profile should have been written with a subscriberCount
+    const authorProfile = await getItem(MAIN_TABLE, { PK: 'USER#undefined', SK: 'PROFILE#AUTHOR' })
+    expect(authorProfile).toBeNull()
   })
 
   // ── account.updated (Stripe Connect) ─────────────────────────────────────

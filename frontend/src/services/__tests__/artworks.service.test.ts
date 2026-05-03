@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   listArtworks,
+  listMyArtworks,
   getArtwork,
   createArtwork,
   updateArtwork,
@@ -151,6 +152,38 @@ describe('deleteArtwork', () => {
     mockDelete.mockResolvedValueOnce(undefined)
     await deleteArtwork('art-001', true)
     expect(mockDelete).toHaveBeenCalledWith('/artworks/art-001?permanent=true')
+  })
+})
+
+// ── listMyArtworks ────────────────────────────────────────────────────────────
+// FR-TESTING-03: authenticated GET /artworks/mine — returns all visibility tiers
+
+describe('listMyArtworks', () => {
+  it('calls GET /artworks/mine with no params when called with empty opts', async () => {
+    mockGet.mockResolvedValueOnce({ items: [], nextCursor: null })
+    await listMyArtworks()
+    expect(mockGet).toHaveBeenCalledWith('/artworks/mine')
+  })
+
+  it('appends limit param when provided', async () => {
+    mockGet.mockResolvedValueOnce({ items: [], nextCursor: null })
+    await listMyArtworks({ limit: 100 })
+    expect(mockGet).toHaveBeenCalledWith('/artworks/mine?limit=100')
+  })
+
+  it('appends cursor param when provided', async () => {
+    mockGet.mockResolvedValueOnce({ items: [], nextCursor: null })
+    await listMyArtworks({ cursor: 'abc123' })
+    expect(mockGet).toHaveBeenCalledWith('/artworks/mine?cursor=abc123')
+  })
+
+  it('returns items including PRIVATE artworks from API response', async () => {
+    const privateArtwork = { artworkId: 'art-priv-001', title: 'Secret', visibility: 'PRIVATE', thumbnailUrl: null }
+    mockGet.mockResolvedValueOnce({ items: [privateArtwork], nextCursor: null })
+    const result = await listMyArtworks({ limit: 10 })
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0].artworkId).toBe('art-priv-001')
+    expect(result.items[0].visibility).toBe('PRIVATE')
   })
 })
 

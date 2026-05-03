@@ -6,7 +6,7 @@ export interface Subscription {
   stripeSubscriptionId: string
   stripeCustomerId:     string
   status:               'ACTIVE' | 'PAST_DUE' | 'CANCELLED' | 'INCOMPLETE'
-  currentPeriodEnd:     string
+  currentPeriodEnd:     string | null
   createdAt:            string
 }
 
@@ -19,7 +19,7 @@ export interface SubscriberItem {
   userId:               string
   stripeSubscriptionId: string
   status:               'ACTIVE' | 'PAST_DUE' | 'CANCELLED' | 'INCOMPLETE' | 'PAUSED'
-  currentPeriodEnd:     string
+  currentPeriodEnd:     string | null
   createdAt:            string
 }
 

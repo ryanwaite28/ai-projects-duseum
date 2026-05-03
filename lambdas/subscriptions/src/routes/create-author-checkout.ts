@@ -31,6 +31,8 @@ export const createAuthorCheckout = async (
 ): Promise<APIGatewayProxyStructuredResultV2> => {
   const { userId } = context
 
+  if (userId === authorId) throw new ValidationError('You cannot subscribe to yourself.')
+
   // Author must exist and be active
   const authorProfile = await getAuthorProfile(docClient, authorId)
   if (!authorProfile || authorProfile.status !== 'ACTIVE') {
@@ -67,7 +69,7 @@ export const createAuthorCheckout = async (
       // metadata propagated to the Stripe Subscription — required for webhook userId resolution
       metadata: { userId, authorId, type: 'AUTHOR_SUB' },
     },
-    success_url: `${APP_BASE_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${APP_BASE_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}&authorId=${authorId}`,
     cancel_url:  `${APP_BASE_URL}/authors/${authorId}`,
     metadata: { userId, authorId, type: 'AUTHOR_SUB' },
   })

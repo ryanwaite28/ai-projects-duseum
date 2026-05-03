@@ -23,6 +23,18 @@ export const listArtworks = (
   return api.get<ArtworkListResponse>(`/artworks${qs ? `?${qs}` : ''}`)
 }
 
+// ── List own artworks (authenticated — all visibility tiers) ──────────────────
+
+export const listMyArtworks = (
+  params: { limit?: number; cursor?: string } = {}
+): Promise<ArtworkListResponse> => {
+  const qs = new URLSearchParams()
+  if (params.limit)  qs.set('limit',  String(params.limit))
+  if (params.cursor) qs.set('cursor', params.cursor)
+  const q = qs.toString()
+  return api.get<ArtworkListResponse>(`/artworks/mine${q ? `?${q}` : ''}`)
+}
+
 // ── Get single artwork ────────────────────────────────────────────────────────
 
 export const getArtwork = (artworkId: string): Promise<Artwork> =>

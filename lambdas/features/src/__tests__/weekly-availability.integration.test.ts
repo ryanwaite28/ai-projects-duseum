@@ -30,8 +30,9 @@ describe('GET /features/weekly/availability', () => {
     expect(result.statusCode).toBe(200)
     const body = JSON.parse(result.body!)
 
-    // WEEKLY_FEATURE_ADVANCE_WEEKS = 8 → current week + 8 ahead = 9 options (FR-FEAT-14)
-    expect(body.weeks).toHaveLength(9)
+    // WEEKLY_FEATURE_ADVANCE_WEEKS = 8 → non-Sunday: current + 8 = 9; Sunday: current week blocked → 8 (FR-FEAT-14)
+    const isSunday = new Date().getUTCDay() === 0
+    expect(body.weeks).toHaveLength(isSunday ? 8 : 9)
     expect(body.feeUsd).toBe(25)
 
     const firstWeek = body.weeks.find((w: { isoWeek: string }) => w.isoWeek === week1)

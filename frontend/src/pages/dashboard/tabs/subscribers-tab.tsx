@@ -108,11 +108,13 @@ export function SubscribersTab() {
                         })}
                       </td>
                       <td className="py-3 px-4 text-[0.78rem] text-stone-light hidden md:table-cell">
-                        {new Date(sub.currentPeriodEnd).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
+                        {sub.currentPeriodEnd
+                          ? new Date(sub.currentPeriodEnd).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })
+                          : '—'}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <span className={`text-[0.72rem] font-medium tracking-[0.1em] uppercase ${statusInfo.color}`}>
