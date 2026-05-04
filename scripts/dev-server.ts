@@ -63,7 +63,8 @@ async function tryImport(modulePath: string, name: string): Promise<HandlerEntry
     }
     console.log(`[dev-server] ${name}: handler loaded`)
     return { handler: mod['handler'] as LambdaHandler, name }
-  } catch {
+  } catch(err) {
+    console.error(err);
     console.warn(`[dev-server] ${name}: handler not yet implemented — will return 501`)
     return { handler: null, name }
   }
