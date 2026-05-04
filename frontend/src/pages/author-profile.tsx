@@ -52,7 +52,7 @@ export default function AuthorProfilePage() {
 
     <PageLayout>
       {/* Wallpaper — full-width, clears fixed navbar via pt-20 in PageLayout's main */}
-      <div className="relative w-full h-56 sm:h-72 lg:h-80 bg-ink-soft overflow-hidden">
+      <div className="relative w-full h-56 sm:h-72 lg:h-96 bg-ink-soft overflow-hidden">
         {author.coverPhotoUrl ? (
           <img
             src={author.coverPhotoUrl}
@@ -70,7 +70,7 @@ export default function AuthorProfilePage() {
         <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/30 to-transparent" />
 
         {/* Icon avatar — overlaps the bottom of the wallpaper */}
-        <div className="absolute bottom-0 left-8 translate-y-1/2 z-10">
+        <div className="absolute bottom-0 left-8 translate-y-1 z-10 mb-4">
           {author.avatarUrl ? (
             <img
               src={author.avatarUrl}
