@@ -13,7 +13,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "dev:lambdas": "tsx watch --env-file=.env.local scripts/dev-server.ts",
+    "dev:lambdas": "NODE_OPTIONS='--require ./scripts/html-require-hook.cjs' tsx watch --env-file=.env.local scripts/dev-server.ts",
     "dev": "concurrently --names \"ministack,lambdas\" --prefix-colors \"cyan,green\" \"docker-compose up -d\" \"npm run dev:lambdas\""
   },
   "devDependencies": {

@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*.*.*'
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -42,13 +43,28 @@ jobs:
     secrets:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
 
+  # ── Single manual approval gate ──────────────────────────────────────────────
+  # Uses the "prod-approval" GitHub Environment (has protection rules / reviewers).
+  # All downstream prod jobs reference "prod" (no protection rules) — so this is
+  # the only point in the pipeline where a reviewer is prompted.
+  prod-gate:
+    name: Approve prod deployment
+    needs: [build, pre-deploy-check]
+    runs-on: ubuntu-latest
+    environment: prod-approval
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Prod deployment approved
+        run: echo "Approved — proceeding with prod deployment."
+
   # ── Deploy all CDK stacks to prod ────────────────────────────────────────────
-  # Gates on both build AND pre-deploy-check — both must pass.
-  # The "prod" GitHub Environment requires manual approval before this job runs.
-  # Configure required reviewers in: Settings → Environments → prod.
+  # Gates on prod-gate (which already requires build + pre-deploy-check).
+  # No additional approval — "prod" environment carries no protection rules.
   deploy-prod:
     name: Deploy (prod)
-    needs: [build, pre-deploy-check]
+    needs: [prod-gate]
     uses: ./.github/workflows/_cdk-deploy.yml
     with:
       environment: prod
