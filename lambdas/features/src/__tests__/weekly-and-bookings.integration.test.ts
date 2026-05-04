@@ -88,7 +88,7 @@ describe('GET /features/weekly', () => {
     expect(authorIds).toContain('author-weekly-001')
   })
 
-  it('featuredAuthor shape includes authorId, displayName, coverPhotoUrl, recentPieces', async () => {
+  it('featuredAuthor shape includes authorId, displayName, avatarUrl, coverPhotoUrl, recentPieces', async () => {
     const currentWeek = getCurrentIsoWeek()
     const { weekStartDate, weekEndDate } = getWeekBounds(currentWeek)
 
@@ -107,8 +107,29 @@ describe('GET /features/weekly', () => {
     expect(typeof author.authorId).toBe('string')
     expect(typeof author.displayName).toBe('string')
     expect(Array.isArray(author.recentPieces)).toBe(true)
-    // coverPhotoUrl can be null
-    expect('coverPhotoUrl' in author).toBe(true)
+    // avatarUrl and coverPhotoUrl both present; null when no photo set
+    expect(Object.prototype.hasOwnProperty.call(author, 'avatarUrl')).toBe(true)
+    expect(author.avatarUrl).toBeNull()
+    expect(Object.prototype.hasOwnProperty.call(author, 'coverPhotoUrl')).toBe(true)
+  })
+
+  it('featuredAuthor.avatarUrl is a public URL when author has a profile photo', async () => {
+    const currentWeek = getCurrentIsoWeek()
+    const { weekStartDate, weekEndDate } = getWeekBounds(currentWeek)
+
+    await seedAuthorProfile('author-weekly-icon', { profilePhotoS3Key: 'icon-photo-key' })
+    await seedActiveBooking('author-weekly-icon', currentWeek, 'bk-w-icon', weekStartDate, weekEndDate)
+
+    const event = makeEvent('GET', '/features/weekly')
+    const res = await handler(event as never, makeCtx())
+    expect(res.statusCode).toBe(200)
+
+    const body = JSON.parse(res.body!)
+    const author = body.featuredAuthors.find(
+      (a: { authorId: string }) => a.authorId === 'author-weekly-icon'
+    )
+    expect(author).toBeDefined()
+    expect(author.avatarUrl).toContain('icon-photo-key')
   })
 
   it('accepts ?week= query param for a specific week', async () => {

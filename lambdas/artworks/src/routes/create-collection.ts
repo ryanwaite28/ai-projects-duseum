@@ -19,9 +19,10 @@ import {
 } from '@duseum/shared'
 
 const CreateCollectionSchema = z.object({
-  title:       z.string().min(1).max(100),
-  description: z.string().max(500).optional().default(''),
-  visibility:  z.enum(['FREE', 'SUBSCRIBER_ONLY']).default('FREE'),
+  title:        z.string().min(1).max(100),
+  description:  z.string().max(500).optional().default(''),
+  visibility:   z.enum(['FREE', 'SUBSCRIBER_ONLY']).default('FREE'),
+  posterS3Key:  z.string().min(1).optional().nullable(),
 })
 
 export const createCollectionRoute = async (
@@ -42,12 +43,13 @@ export const createCollectionRoute = async (
 
   const collection = {
     collectionId,
-    ownerId:    userId,
-    title:      body.title,
-    description: body.description,
-    visibility: body.visibility,
-    createdAt:  now,
-    updatedAt:  now,
+    ownerId:      userId,
+    title:        body.title,
+    description:  body.description,
+    visibility:   body.visibility,
+    posterS3Key:  body.posterS3Key ?? null,
+    createdAt:    now,
+    updatedAt:    now,
   }
 
   await createCollection(docClient, collection)

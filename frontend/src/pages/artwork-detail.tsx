@@ -129,9 +129,24 @@ export default function ArtworkDetailPage() {
 
               <Link
                 to={`/authors/${artwork.authorId}`}
-                className="text-[0.85rem] font-light text-gold hover:text-gold-light transition-colors duration-200"
+                className="inline-flex items-center gap-2.5 group"
               >
-                {artwork.authorDisplayName}
+                {artwork.authorIconUrl ? (
+                  <img
+                    src={artwork.authorIconUrl}
+                    alt={artwork.authorDisplayName}
+                    className="w-8 h-8 rounded-full object-cover border border-gold/20 flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-ink-raised border border-gold/20 flex items-center justify-center flex-shrink-0">
+                    <span className="font-display text-[0.72rem] text-gold font-semibold leading-none">
+                      {artwork.authorDisplayName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <span className="text-[0.85rem] font-light text-gold group-hover:text-gold-light transition-colors duration-200">
+                  {artwork.authorDisplayName}
+                </span>
               </Link>
 
               <GoldDivider />

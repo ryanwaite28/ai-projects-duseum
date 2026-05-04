@@ -3,6 +3,7 @@
 **Status**: ✅ Implemented
 **FR coverage**: FR-DISC-01, FR-DISC-02, FR-DISC-03, FR-DISC-04, FR-DISC-05, FR-VIEW-02
 **Relevant PROJECT.md sections**: 2.8, 4.7, 8
+**Related specs**: `specs/discovery/browse-collections.md` (FR-DISC-06/07 — collections on homepage + browse page, not yet implemented)
 
 **What this implements**: Public homepage data (Daily Featured Author, Weekly Featured Authors, recent/trending pieces); browse page with filters; full-text search; piece detail page data.
 

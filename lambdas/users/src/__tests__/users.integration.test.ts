@@ -461,7 +461,8 @@ describe('GET /users/{userId}/profile', () => {
 // ── GET /authors/{authorId}/collections ──────────────────────────────────────
 //
 // Owner (JWT sub === authorId) → all visibility tiers returned
-// Non-owner / unauthenticated → FREE only
+// Active author subscriber     → all visibility tiers returned (FR-COL-03)
+// Non-subscriber / unauthenticated → FREE only
 //
 describe('GET /authors/{authorId}/collections', () => {
   const COLL_AUTHOR = 'coll-author-001'
@@ -546,6 +547,62 @@ describe('GET /authors/{authorId}/collections', () => {
     const body = JSON.parse(res.body!)
     const visibilities = body.items.map((c: { visibility: string }) => c.visibility)
     expect(visibilities.every((v: string) => v === 'FREE')).toBe(true)
+  })
+
+  it('active author subscriber sees SUBSCRIBER_ONLY collections — regression: was returning FREE only', async () => {
+    const SUBSCRIBER = 'coll-subscriber-001'
+    await seedAuthorProfile(COLL_AUTHOR)
+    await seedCollection('col-free-004', 'FREE')
+    await seedCollection('col-sub-004',  'SUBSCRIBER_ONLY')
+
+    // Seed an ACTIVE author subscription for SUBSCRIBER → COLL_AUTHOR
+    await seedItem({
+      PK: `USER#${SUBSCRIBER}`,
+      SK: `SUB#AUTHOR#${COLL_AUTHOR}`,
+      viewerId:    SUBSCRIBER,
+      authorId:    COLL_AUTHOR,
+      status:      'ACTIVE',
+      createdAt:   new Date().toISOString(),
+    })
+
+    const event = makeEvent('GET', `/authors/${COLL_AUTHOR}/collections`, {
+      userId: SUBSCRIBER,
+      pathParameters: { authorId: COLL_AUTHOR },
+    })
+    const res = await handler(event as never, makeCtx())
+
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body!)
+    const visibilities = body.items.map((c: { visibility: string }) => c.visibility)
+    expect(visibilities).toContain('FREE')
+    expect(visibilities).toContain('SUBSCRIBER_ONLY')
+  })
+
+  it('non-active (cancelled) author subscription sees FREE collections only', async () => {
+    const CANCELLED_SUB = 'coll-subscriber-002'
+    await seedAuthorProfile(COLL_AUTHOR)
+    await seedCollection('col-free-005', 'FREE')
+    await seedCollection('col-sub-005',  'SUBSCRIBER_ONLY')
+
+    await seedItem({
+      PK: `USER#${CANCELLED_SUB}`,
+      SK: `SUB#AUTHOR#${COLL_AUTHOR}`,
+      viewerId:    CANCELLED_SUB,
+      authorId:    COLL_AUTHOR,
+      status:      'CANCELLED',
+      createdAt:   new Date().toISOString(),
+    })
+
+    const event = makeEvent('GET', `/authors/${COLL_AUTHOR}/collections`, {
+      userId: CANCELLED_SUB,
+      pathParameters: { authorId: COLL_AUTHOR },
+    })
+    const res = await handler(event as never, makeCtx())
+
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body!)
+    const visibilities = body.items.map((c: { visibility: string }) => c.visibility)
+    expect(visibilities).not.toContain('SUBSCRIBER_ONLY')
   })
 
   it('returns 404 for non-existent author', async () => {

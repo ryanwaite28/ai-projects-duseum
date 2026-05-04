@@ -1,7 +1,10 @@
 // =============================================================================
 // lambdas/users/src/routes/get-author-collections.ts
 // GET /authors/{authorId}/collections — Author's collections (§8.5, FR-COL-*)
-// JWT optional. Owner sees all collections; non-owners/unauthenticated see FREE only.
+// JWT optional.
+// Owner            → all collections (FREE + SUBSCRIBER_ONLY)
+// Active subscriber → all collections (FR-COL-03)
+// Everyone else    → FREE only
 // =============================================================================
 
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
@@ -10,8 +13,10 @@ import {
   NotFoundError,
   docClient,
   getAuthorProfile,
+  getAuthorSubscription,
   listCollectionsByAuthor,
   ok,
+  publicUrl,
 } from '@duseum/shared'
 
 export const getAuthorCollections = async (
@@ -24,8 +29,14 @@ export const getAuthorCollections = async (
 
   const isOwner = context.userId === authorId
 
+  let isSubscriber = false
+  if (!isOwner && context.userId) {
+    const sub = await getAuthorSubscription(docClient, context.userId, authorId)
+    isSubscriber = sub?.status === 'ACTIVE'
+  }
+
   const result = await listCollectionsByAuthor(docClient, authorId, {
-    visibilityFilter: isOwner ? undefined : 'FREE',
+    visibilityFilter: (isOwner || isSubscriber) ? undefined : 'FREE',
   })
 
   return ok({
@@ -34,6 +45,7 @@ export const getAuthorCollections = async (
       title:        c.title,
       description:  c.description,
       visibility:   c.visibility,
+      posterUrl:    c.posterS3Key ? publicUrl(c.posterS3Key) : null,
       createdAt:    c.createdAt,
       updatedAt:    c.updatedAt,
     })),

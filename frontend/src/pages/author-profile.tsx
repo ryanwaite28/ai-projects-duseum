@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { EyebrowLabel } from '../components/ui/EyebrowLabel'
 import { GoldDivider } from '../components/ui/GoldDivider'
+import { CollectionCard } from '../components/ui/CollectionCard'
 import { PageLayout } from '../components/layout/PageLayout'
 import { ArtworkGrid } from '../components/artwork/ArtworkGrid'
 import { FollowButton } from '../components/social/FollowButton'
@@ -50,13 +51,13 @@ export default function AuthorProfilePage() {
   return (
 
     <PageLayout>
-      {/* Cover photo */}
-      <div className="relative h-72 bg-ink-soft overflow-hidden">
+      {/* Wallpaper — full-width, clears fixed navbar via pt-20 in PageLayout's main */}
+      <div className="relative w-full h-56 sm:h-72 lg:h-96 bg-ink-soft overflow-hidden">
         {author.coverPhotoUrl ? (
           <img
             src={author.coverPhotoUrl}
-            alt={`${author.displayName} cover`}
-            className="w-full h-full object-cover opacity-60"
+            alt={`${author.displayName} wallpaper`}
+            className="w-full h-full object-cover"
           />
         ) : (
           <div
@@ -66,11 +67,28 @@ export default function AuthorProfilePage() {
             }}
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/30 to-transparent" />
+
+        {/* Icon avatar — overlaps the bottom of the wallpaper */}
+        <div className="absolute bottom-0 left-8 translate-y-1 z-10 mb-4">
+          {author.avatarUrl ? (
+            <img
+              src={author.avatarUrl}
+              alt={author.displayName}
+              className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-2 border-gold/40 bg-ink-raised"
+            />
+          ) : (
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-gold/30 bg-ink-raised flex items-center justify-center">
+              <span className="font-display text-[1.4rem] sm:text-[1.6rem] text-gold font-semibold leading-none">
+                {author.displayName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Profile header */}
-      <section className="py-12 px-8 bg-ink border-t border-gold/10">
+      <section className="pt-16 sm:pt-20 pb-12 px-8 bg-ink border-t border-gold/10">
         <div className="max-w-[1100px] mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-12 items-start">
             <div>
@@ -153,42 +171,17 @@ export default function AuthorProfilePage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {collections.map((col) => (
-                <div
+                <CollectionCard
                   key={col.collectionId}
-                  className="bg-ink-soft border border-gold/10 rounded-sm overflow-hidden group hover:border-gold/25 transition-colors duration-200"
-                >
-                  {col.coverPieceUrl ? (
-                    <div className="aspect-[16/9] overflow-hidden">
-                      <img
-                        src={col.coverPieceUrl}
-                        alt={col.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                    </div>
-                  ) : (
-                    <div className="aspect-[16/9] bg-ink flex items-center justify-center">
-                      <span className="font-display italic text-stone-light text-xs">No cover</span>
-                    </div>
-                  )}
-                  <div className="p-5">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <h3 className="font-display text-[1rem] font-semibold text-warm-white leading-snug">{col.title}</h3>
-                      <span className={`flex-shrink-0 text-[0.62rem] font-medium tracking-[0.16em] uppercase px-[0.6rem] py-[0.25rem] rounded-sm ${
-                        col.visibility === 'FREE'
-                          ? 'text-[#5a9e6e] bg-[#5a9e6e]/12'
-                          : 'text-gold bg-gold/12'
-                      }`}>
-                        {col.visibility === 'FREE' ? 'Free' : 'Subscribers'}
-                      </span>
-                    </div>
-                    {col.description && (
-                      <p className="text-[0.78rem] font-light text-stone-light line-clamp-2 mb-3">{col.description}</p>
-                    )}
-                    <span className="text-[0.68rem] font-medium tracking-[0.12em] uppercase text-stone-light">
-                      {col.pieceCount} piece{col.pieceCount !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                </div>
+                  collectionId={col.collectionId}
+                  title={col.title}
+                  description={col.description}
+                  posterUrl={col.posterUrl}
+                  coverPieceUrl={col.coverPieceUrl}
+                  pieceCount={col.pieceCount}
+                  visibility={col.visibility}
+                  disableLink
+                />
               ))}
             </div>
           </div>

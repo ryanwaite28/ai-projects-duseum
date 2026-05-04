@@ -81,6 +81,7 @@ beforeAll(async () => {
         { AttributeName: 'status',             AttributeType: 'S' },
         { AttributeName: 'createdAt',          AttributeType: 'S' },
         { AttributeName: 'tag',                AttributeType: 'S' },
+        { AttributeName: 'collectionBrowse',   AttributeType: 'S' },
       ],
       GlobalSecondaryIndexes: [
         {
@@ -104,6 +105,14 @@ beforeAll(async () => {
           KeySchema: [
             { AttributeName: 'tag',       KeyType: 'HASH' },
             { AttributeName: 'createdAt', KeyType: 'RANGE' },
+          ],
+          Projection: { ProjectionType: 'ALL' },
+        },
+        {
+          IndexName: 'GSI-AllFreeCollections',
+          KeySchema: [
+            { AttributeName: 'collectionBrowse', KeyType: 'HASH' },
+            { AttributeName: 'createdAt',        KeyType: 'RANGE' },
           ],
           Projection: { ProjectionType: 'ALL' },
         },

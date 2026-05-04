@@ -18,13 +18,13 @@ interface WeeklyFeaturedCarouselProps {
   isLoading?: boolean
 }
 
-const AuthorSlot = ({ author, index }: { author?: WeeklyFeaturedAuthor; index: number }) => (
+const AuthorSlot = ({ author }: { author?: WeeklyFeaturedAuthor }) => (
   <div className="flex-shrink-0 w-52">
     <Link
       to={author ? `/authors/${author.authorId}` : '#'}
       className={`block group no-underline ${!author ? 'pointer-events-none' : ''}`}
     >
-      {/* Cover photo */}
+      {/* Cover photo → icon avatar → initials placeholder */}
       <div className="aspect-[4/5] bg-ink border border-gold/10 rounded-sm overflow-hidden mb-3 relative">
         {author?.coverPhotoUrl ? (
           <img
@@ -32,11 +32,27 @@ const AuthorSlot = ({ author, index }: { author?: WeeklyFeaturedAuthor; index: n
             alt={author.displayName}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
+        ) : author?.avatarUrl ? (
+          <div className="w-full h-full flex items-center justify-center bg-ink-soft">
+            <img
+              src={author.avatarUrl}
+              alt={author.displayName}
+              className="w-20 h-20 rounded-full object-cover border border-gold/20"
+            />
+          </div>
+        ) : author ? (
+          <div className="w-full h-full flex items-center justify-center bg-ink-soft">
+            <div className="w-20 h-20 rounded-full border border-gold/20 bg-ink-raised flex items-center justify-center">
+              <span className="font-display text-[1.6rem] text-gold font-semibold leading-none">
+                {author.displayName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <span className="font-display text-[2rem] text-gold/15 group-hover:text-gold/25 transition-colors duration-300">
-              {String(index + 1).padStart(2, '0')}
-            </span>
+            <div className="w-20 h-20 rounded-full border border-gold/10 bg-ink-raised/50 flex items-center justify-center">
+              <span className="font-display text-gold/20 text-[1.4rem]">?</span>
+            </div>
           </div>
         )}
         {author && (
@@ -79,7 +95,10 @@ const AuthorSlot = ({ author, index }: { author?: WeeklyFeaturedAuthor; index: n
 )
 
 export const WeeklyFeaturedCarousel = ({ data, isLoading }: WeeklyFeaturedCarouselProps) => {
-  const ref    = useReveal<HTMLElement>()
+  // ref must be on an element that is always in the DOM so IntersectionObserver
+  // fires correctly regardless of load state.
+  const ref = useReveal<HTMLElement>()
+
   // Shuffle once on mount so order differs each page load (FR-FEAT-16)
   const shuffledAuthors = useMemo(
     () => shuffled(data?.featuredAuthors ?? []),
@@ -128,7 +147,7 @@ export const WeeklyFeaturedCarousel = ({ data, isLoading }: WeeklyFeaturedCarous
                   </div>
                 </div>
               ))
-            : slots.map((a, i) => <AuthorSlot key={i} author={a} index={i} />)
+            : slots.map((a, i) => <AuthorSlot key={i} author={a} />)
           }
         </div>
       </div>

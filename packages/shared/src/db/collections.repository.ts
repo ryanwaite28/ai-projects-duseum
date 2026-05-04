@@ -37,9 +37,11 @@ export const createCollection = async (
   client: DynamoDBDocumentClient,
   collection: Collection & { ownerId: string }
 ): Promise<void> => {
-  const { collectionId, ownerId, createdAt } = collection
+  const { collectionId, ownerId, createdAt, visibility, posterS3Key } = collection
 
-  // Write collection metadata + author-index item in parallel
+  // FREE collections get collectionBrowse='FREE' so GSI-AllFreeCollections can index them (FR-DISC-06/07)
+  const browseAttr = visibility === 'FREE' ? { collectionBrowse: 'FREE' } : {}
+
   await Promise.all([
     client.send(
       new PutCommand({
@@ -47,6 +49,7 @@ export const createCollection = async (
         Item: {
           ...collectionKey(collectionId),
           ...collection,
+          ...browseAttr,
         },
         ConditionExpression: 'attribute_not_exists(PK)',
       })
@@ -59,7 +62,8 @@ export const createCollection = async (
           collectionId,
           ownerId,
           title:      collection.title,
-          visibility: collection.visibility,
+          visibility,
+          ...(posterS3Key != null ? { posterS3Key } : {}),
           createdAt,
         },
       })
@@ -124,13 +128,14 @@ export const listCollectionsByAuthor = async (
 export const updateCollection = async (
   client: DynamoDBDocumentClient,
   collectionId: string,
-  patch: { title?: string; description?: string }
+  patch: { title?: string; description?: string; posterS3Key?: string | null }
 ): Promise<Collection> => {
   const sets: string[] = ['updatedAt = :updatedAt']
   const values: Record<string, unknown> = { ':updatedAt': new Date().toISOString() }
 
   if (patch.title !== undefined) { sets.push('title = :title'); values[':title'] = patch.title }
   if (patch.description !== undefined) { sets.push('description = :description'); values[':description'] = patch.description }
+  if (patch.posterS3Key !== undefined) { sets.push('posterS3Key = :poster'); values[':poster'] = patch.posterS3Key }
 
   const result = await client.send(
     new UpdateCommand({
@@ -295,4 +300,35 @@ export const getFirstCollectionItem = async (
   )
   const item = (result.Items ?? [])[0]
   return item ? (item as CollectionItem) : null
+}
+
+// ── Browse: all FREE collections via GSI-AllFreeCollections (FR-DISC-06/07) ──
+
+export type ListFreeCollectionsOptions = {
+  limit?: number
+  lastKey?: Record<string, unknown>
+}
+
+export const listFreeCollections = async (
+  client: DynamoDBDocumentClient,
+  opts: ListFreeCollectionsOptions = {}
+): Promise<{ items: Collection[]; lastKey?: Record<string, unknown> }> => {
+  const { limit = 20, lastKey } = opts
+
+  const result = await client.send(
+    new QueryCommand({
+      TableName:              TABLE_NAME,
+      IndexName:              'GSI-AllFreeCollections',
+      KeyConditionExpression: 'collectionBrowse = :browse',
+      ExpressionAttributeValues: { ':browse': 'FREE' },
+      ScanIndexForward: false, // newest first
+      Limit: limit,
+      ExclusiveStartKey: lastKey,
+    })
+  )
+
+  return {
+    items:   (result.Items ?? []) as Collection[],
+    lastKey: result.LastEvaluatedKey as Record<string, unknown> | undefined,
+  }
 }

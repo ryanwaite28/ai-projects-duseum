@@ -13,13 +13,14 @@
 
 | Lambda | Route | Test file | Status |
 |---|---|---|---|
-| artworks | `GET /artworks/{id}` | get-artwork.integration.test.ts | ✅ |
+| artworks | `GET /artworks/{id}` — incl. `authorIconUrl` null + URL | get-artwork.integration.test.ts | ✅ |
 | artworks | `GET /artworks` | list-artworks.integration.test.ts | ✅ |
 | artworks | `POST /artworks` | publish-piece.integration.test.ts | ✅ |
 | artworks | `PUT /artworks/{id}` | artwork-mutations.integration.test.ts | ✅ |
 | artworks | `DELETE /artworks/{id}` | artwork-mutations.integration.test.ts | ✅ |
 | artworks | `GET /artworks/mine` | artwork-mutations.integration.test.ts | ✅ |
 | artworks | `POST /collections` | collections.integration.test.ts | ✅ |
+| artworks | `GET /collections` (browse — FR-DISC-07) | collections.integration.test.ts | ✅ |
 | artworks | `GET /collections/{id}` | collections.integration.test.ts | ✅ |
 | artworks | `DELETE /collections/{id}` | collections.integration.test.ts | ✅ |
 | artworks | `GET /authors/{id}/collections` | collections.integration.test.ts | ✅ |
@@ -27,7 +28,7 @@
 | features | `GET /features/weekly/availability` | weekly-availability.integration.test.ts | ✅ |
 | features | `POST /features/weekly/book` | book-weekly-feature.integration.test.ts | ✅ |
 | features | `GET /features/daily` | daily-feature.integration.test.ts | ✅ |
-| features | `GET /features/weekly` | weekly-and-bookings.integration.test.ts | ✅ |
+| features | `GET /features/weekly` — incl. `avatarUrl` null + URL | weekly-and-bookings.integration.test.ts | ✅ |
 | features | `GET /features/weekly/my-bookings` | weekly-and-bookings.integration.test.ts | ✅ |
 | subscriptions | `GET /subscriptions/me` | subscriptions.integration.test.ts | ✅ |
 | subscriptions | `POST /subscriptions/platform` | subscriptions.integration.test.ts | ✅ |
@@ -43,6 +44,7 @@
 | users | `GET /authors` | users.integration.test.ts | ✅ |
 | users | `GET /authors/{id}` | users.integration.test.ts | ✅ |
 | users | `GET /users/{id}/profile` | users.integration.test.ts | ✅ |
+| users | `GET /authors/{id}/collections` — subscriber sees SUBSCRIBER_ONLY (FR-COL-03 regression) | users.integration.test.ts | ✅ |
 | admin | `PUT /admin/features/daily/override` | admin-features.integration.test.ts | ✅ |
 | admin | `DELETE /admin/features/weekly/bookings/{id}` | admin-features.integration.test.ts | ✅ |
 | admin | `GET /admin/features/weekly` | admin-features.integration.test.ts | ✅ |
@@ -63,7 +65,7 @@
 
 | Service file | Test file | Status |
 |---|---|---|
-| authors.service.ts | authors.service.test.ts | ✅ |
+| authors.service.ts | authors.service.test.ts — incl. `updateAuthorProfile()` (5 tests) | ✅ |
 | artworks.service.ts | artworks.service.test.ts | ✅ |
 | features.service.ts | features.service.test.ts | ✅ |
 | follows.service.ts | follows.service.test.ts | ✅ |
@@ -83,12 +85,34 @@
 | AuthorSubscribeCTA | AuthorSubscribeCTA.test.tsx | returns null (charges disabled), already subscribed, subscribe button+price, unauth redirect, auth mutation, error state | ✅ |
 | ProtectedRoute | ProtectedRoute.test.tsx | loading spinner, unauth redirect, children rendered | ✅ |
 | AdminRoute | AdminRoute.test.tsx | auth loading, me loading, unauth redirect, non-ADMIN→403, ADMIN renders children | ✅ |
+| ProfileImageUpload | ProfileImageUpload.test.tsx | idle render, currentUrl preview, no-image placeholder, unsupported MIME error, size error, success+Saved+updateAuthorProfile called, API error, button disabled during upload | ✅ |
+| DailyFeaturedSpotlight | DailyFeaturedSpotlight.test.tsx | skeleton when loading, author content on initial load (reveal regression), follower/subscriber counts, cover photo, null-author fallback, buttons, subscribe CTA | ✅ |
 
 ### Zustand Store Regression Tests
 
 | Store | Test file | What is covered | Status |
 |---|---|---|---|
 | auth.store.ts | auth.store.test.ts | `signOut()` calls `queryClient.clear()` before nulling user (FR-TESTING-06) | ✅ |
+
+### Collection Poster Image Tests — FR-COL-07
+
+| Scope | What | Status |
+|---|---|---|
+| artworks integration | `POST /collections` with `posterS3Key` → list response includes `posterUrl` | ❌ |
+| artworks integration | `PUT /collections/{id}` with `posterS3Key: null` → clears poster | ❌ |
+| users integration | `GET /authors/{id}/collections` includes `posterUrl` on each item | ❌ |
+| frontend component | `CollectionCard` renders poster → thumbnail → placeholder fallback chain | ❌ |
+
+### Browse Collections Tests — FR-DISC-06, FR-DISC-07
+
+| Scope | What | Status |
+|---|---|---|
+| artworks integration | `GET /collections` returns FREE collections only with correct shape | ✅ |
+| artworks integration | `GET /collections` cursor pagination | ✅ |
+| artworks integration | `GET /collections?sort=oldest` → 400 | ✅ |
+| artworks integration | `GET /collections` empty array when only SUBSCRIBER_ONLY collections exist | ✅ |
+| features integration | `GET /features/homepage` `exploreCollections` array (not implemented — `ExploreCollectionsSection` fetches independently) | N/A |
+| frontend component | `ExploreCollectionsSection` renders skeleton, cards, empty state | ❌ |
 
 ### Transactional Email Tests — Gap Analysis (FR-NOTIF-12)
 
@@ -133,6 +157,7 @@
 - `frontend/src/components/__tests__/AuthorSubscribeCTA.test.tsx`
 - `frontend/src/components/__tests__/ProtectedRoute.test.tsx`
 - `frontend/src/components/__tests__/AdminRoute.test.tsx`
+- `frontend/src/components/__tests__/ProfileImageUpload.test.tsx` — icon/wallpaper upload: 8 tests (idle, preview, errors, success, disabled state)
 - `frontend/src/test/test-utils.tsx` — shared render wrapper (QueryClientProvider + MemoryRouter)
 - `frontend/src/test/setup.ts` — updated: patches `window.location` to silence jsdom navigation warnings
 

@@ -242,4 +242,38 @@ describe('GET /artworks/{artworkId}', () => {
     const body = JSON.parse(res.body!)
     expect(body.error.code).toBe('FORBIDDEN')
   })
+
+  it('includes authorIconUrl: null when author has no profile photo', async () => {
+    await seedAuthorProfile(AUTHOR_ID, 'Test Author')
+    await seedArtwork()
+    const event = makeEvent('GET', '/artworks/art-001', {
+      pathParameters: { artworkId: 'art-001' },
+    })
+    const res  = await handler(event as never, makeCtx())
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body!)
+    expect(Object.prototype.hasOwnProperty.call(body, 'authorIconUrl')).toBe(true)
+    expect(body.authorIconUrl).toBeNull()
+  })
+
+  it('includes authorIconUrl as a public URL when author has a profile photo', async () => {
+    await seedItem({
+      PK:               `USER#${AUTHOR_ID}`,
+      SK:               'PROFILE#AUTHOR',
+      userId:           AUTHOR_ID,
+      profileType:      'AUTHOR',
+      status:           'ACTIVE',
+      displayName:      'Test Author',
+      bio:              '',
+      profilePhotoS3Key: 'icon-key-abc',
+    })
+    await seedArtwork()
+    const event = makeEvent('GET', '/artworks/art-001', {
+      pathParameters: { artworkId: 'art-001' },
+    })
+    const res  = await handler(event as never, makeCtx())
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body!)
+    expect(body.authorIconUrl).toContain('icon-key-abc')
+  })
 })

@@ -106,5 +106,6 @@ export const getArtwork = async (
     ...(imageResolved.imageUrlExpiresAt ? { imageUrlExpiresAt: imageResolved.imageUrlExpiresAt } : {}),
     viewerReaction:     viewerReactionRecord?.reactionType ?? null,
     authorDisplayName:  authorProfile?.displayName ?? '',
+    authorIconUrl:      authorProfile?.profilePhotoS3Key ? publicUrl(authorProfile.profilePhotoS3Key) : null,
   })
 }

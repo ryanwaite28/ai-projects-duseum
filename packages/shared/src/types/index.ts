@@ -147,6 +147,7 @@ export type Collection = {
   title: string
   description: string
   visibility: CollectionVisibility  // immutable after creation (FR-COL-03)
+  posterS3Key?: string | null  // FR-COL-07: optional poster image
   createdAt: string
   updatedAt: string
 }

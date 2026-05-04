@@ -54,6 +54,7 @@ const PUBLIC_PATHS: ReadonlySet<string> = new Set([
   'GET /authors/{authorId}',
   'GET /authors/{authorId}/artworks',
   'GET /authors/{authorId}/collections',
+  'GET /collections',
   'GET /collections/{collectionId}',
   'GET /users/{userId}/profile',
   'GET /notifications/unsubscribe',

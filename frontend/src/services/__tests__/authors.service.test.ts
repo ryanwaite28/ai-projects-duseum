@@ -8,11 +8,11 @@
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getAuthor } from '../authors.service'
+import { getAuthor, updateAuthorProfile } from '../authors.service'
 import { api } from '../api'
 
 vi.mock('../api', () => ({
-  api: { get: vi.fn() },
+  api: { get: vi.fn(), put: vi.fn() },
 }))
 
 const mockGet = vi.mocked(api.get)
@@ -154,5 +154,42 @@ describe('getAuthor', () => {
       const result = await getAuthor('author-001')
       expect(result.recentPieces).toEqual([])
     })
+  })
+})
+
+describe('updateAuthorProfile', () => {
+  const mockPut = vi.mocked(api.put)
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it('calls PUT /users/me/author with the patch payload', async () => {
+    mockPut.mockResolvedValueOnce({ displayName: 'Updated Name' })
+    await updateAuthorProfile({ displayName: 'Updated Name' })
+    expect(mockPut).toHaveBeenCalledWith('/users/me/author', { displayName: 'Updated Name' })
+  })
+
+  it('passes profilePhotoS3Key for icon update', async () => {
+    mockPut.mockResolvedValueOnce({})
+    await updateAuthorProfile({ profilePhotoS3Key: 'abc-123-key' })
+    expect(mockPut).toHaveBeenCalledWith('/users/me/author', { profilePhotoS3Key: 'abc-123-key' })
+  })
+
+  it('passes coverPhotoS3Key for wallpaper update', async () => {
+    mockPut.mockResolvedValueOnce({})
+    await updateAuthorProfile({ coverPhotoS3Key: 'wallpaper-key' })
+    expect(mockPut).toHaveBeenCalledWith('/users/me/author', { coverPhotoS3Key: 'wallpaper-key' })
+  })
+
+  it('passes null to clear an image', async () => {
+    mockPut.mockResolvedValueOnce({})
+    await updateAuthorProfile({ profilePhotoS3Key: null })
+    expect(mockPut).toHaveBeenCalledWith('/users/me/author', { profilePhotoS3Key: null })
+  })
+
+  it('returns the response from api.put', async () => {
+    const mockResponse = { userId: 'u-001', displayName: 'New Name' }
+    mockPut.mockResolvedValueOnce(mockResponse)
+    const result = await updateAuthorProfile({ displayName: 'New Name' })
+    expect(result).toEqual(mockResponse)
   })
 })
