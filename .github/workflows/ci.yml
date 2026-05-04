@@ -1,8 +1,8 @@
 name: CI
 
 on:
-  pull_request:
-    branches: [develop, main]
+  # pull_request:
+  #   branches: [develop, main]
   workflow_call:
 
 permissions:
