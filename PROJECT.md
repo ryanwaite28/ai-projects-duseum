@@ -163,6 +163,7 @@ To give artists a beautiful, museum-quality space to share their work — and to
 - **FR-COL-04**: Authors set the display order of pieces within a collection
 - **FR-COL-05**: A piece can belong to multiple collections
 - **FR-COL-06**: Collections display a piece count adjusted to the viewer's access tier (e.g., "12 pieces — 4 visible to you")
+- **FR-COL-07**: Collections have an optional **poster image** (`posterS3Key`). Authors upload the poster via the `POST /media/upload-intent` flow when creating or editing a collection in their dashboard. The resolved `posterUrl` (CloudFront URL) is returned in all API responses that list collections (`GET /authors/{id}/collections`, `GET /features/homepage`, `GET /collections`). Frontend falls back to the first-piece thumbnail when `posterUrl` is absent, then to a branded placeholder. Poster images are stored in S3 and served via CloudFront under the same rules as all other author media.
 
 ### 2.7 Subscriptions & Payments
 
@@ -187,6 +188,8 @@ To give artists a beautiful, museum-quality space to share their work — and to
 - **FR-DISC-03**: Search deferred to a future phase. *(Full-text search requires OpenSearch or a scan-based approach that conflicts with the no-full-scan rule.)*
 - **FR-DISC-04**: Author directory: paginated list of all Authors, sortable by subscriber count and newest
 - **FR-DISC-05**: Piece detail page: full-resolution image (CloudFront-served), metadata, Author info, reactions. *(Comment thread and related pieces on detail page deferred — add in frontend integration phase.)*
+- **FR-DISC-06**: The public homepage displays an **"Explore Collections"** section showing up to 6 randomly sampled FREE collections from across all authors. Each card displays the poster image (FR-COL-07 fallback rules apply), collection title, author display name, and piece count. Collections are sampled in Lambda memory from `GSI-AllFreeCollections` and returned as part of the `GET /features/homepage` response payload. No auth required.
+- **FR-DISC-07**: A dedicated **`/browse/collections`** frontend page and corresponding `GET /collections` backend route list all FREE collections from all authors, cursor-paginated (default limit: 20, max: 50), sorted by newest. Each collection card displays poster image, title, author display name, and piece count. Backend route lives in `artworks-lambda` and uses `GSI-AllFreeCollections`. *(sort=trending and sort=most-interacted deferred — require an interaction-count GSI not yet provisioned.)*
 
 ### 2.9 Social Interactions
 
@@ -553,6 +556,7 @@ Duseum uses a **single-table design** pattern with a main `duseum-{env}` table p
 | `GSI-TagIndex` | `tag` | `createdAt` | Browse by tag |
 | `GSI-WeeklyFeatureByStatus` | `featureStatus` (= `CONFIRMED`\|`ACTIVE`\|`ARCHIVED`) | `isoWeek` | Query all confirmed/active bookings for a given week; used by homepage and maintenance rotation |
 | `GSI-AuthorDirectory` | `profileType` (= `'AUTHOR'`) | `createdAt` | Paginated author directory (newest sort); filter `status = 'ACTIVE'` in application |
+| `GSI-AllFreeCollections` | `collectionBrowse` (= `'FREE'`) | `createdAt` | Browse all FREE collections globally; homepage "Explore Collections" section (FR-DISC-06) + browse-collections page (FR-DISC-07). Only FREE collection METADATA items carry this attribute (sparse GSI). |
 
 #### Idempotency Table: `duseum-{env}-idempotency`
 

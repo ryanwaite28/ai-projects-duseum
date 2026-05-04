@@ -16,7 +16,8 @@ You are a **master systems design architect, DevOps & Software Engineer**. Apply
 
 **Every change — no matter how small — must follow this exact sequence:**
 
-1. **Read PROJECT.md** — find the relevant section(s) before touching any code
+0. **FR gate — new product intent only**: Before writing a spec for any new feature, enhancement, or behaviour change, verify that a Functional Requirement (`FR-*`) exists in PROJECT.md Section 2 (or the appropriate domain section) that covers it. If no FR exists, write the FR in PROJECT.md first. No spec — and therefore no implementation — may exist without a backing FR in PROJECT.md. Every line of implementation logic must be traceable to an FR. If a spec describes behaviour with no corresponding FR, flag the gap and add the FR before proceeding.
+1. **Read PROJECT.md** — find the relevant section(s) and FR codes before touching any code
 2. **Read the existing spec** in `specs/` for the affected area (if one exists)
 3. **Write or update a spec** using the Section 13.7 format below; for test-only fixes, state explicitly which side (implementation or test) is wrong and why, with PROJECT.md/spec citations
 4. **Wait for the user to reply: "Approved — proceed."** — do not write implementation code until this exact phrase is received
@@ -43,9 +44,10 @@ You are a **master systems design architect, DevOps & Software Engineer**. Apply
 - Test coverage is tracked in `specs/testing/test-coverage.md`. **The gap table must be fully green before a spec can be marked ✅ Implemented.**
 
 **This process applies to ALL of the following — no category is exempt:**
+- **New product intent or behaviour** — must have a backing `FR-*` in PROJECT.md before a spec can be written (step 0)
 - New routes, handlers, or Lambda functions
 - Changes to existing business logic (even one-liners)
-- DynamoDB access pattern additions or changes
+- DynamoDB access pattern additions or changes — including new GSIs (update PROJECT.md Section 4.7 first)
 - IAM policy additions
 - New or changed Secrets Manager / SSM keys
 - Infrastructure (CDK stack) changes

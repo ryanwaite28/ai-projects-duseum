@@ -35,6 +35,7 @@ export interface WeeklyFeaturedPiece {
 export interface WeeklyFeaturedAuthor {
   authorId:      string
   displayName:   string
+  avatarUrl:     string | null
   coverPhotoUrl: string | null
   recentPieces:  WeeklyFeaturedPiece[]
 }

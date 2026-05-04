@@ -472,3 +472,114 @@ describe('GET /authors/{authorId}/collections', () => {
     expect(col.coverPieceUrl).toBeNull()
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /collections — FR-DISC-07 browse endpoint
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('GET /collections (browse)', () => {
+  it('returns 200 with correct top-level shape', async () => {
+    await seedAuthorProfile()
+    await callHandler(makeEvent('POST', '/collections', {
+      userId: AUTHOR_ID,
+      body:   { title: 'Browse Col A', visibility: 'FREE' },
+    }))
+
+    const res = await callHandler(makeEvent('GET', '/collections', {}))
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body).toHaveProperty('items')
+    expect(Array.isArray(body.items)).toBe(true)
+  })
+
+  it('returns FREE collections with required fields on each item', async () => {
+    await seedAuthorProfile()
+    await callHandler(makeEvent('POST', '/collections', {
+      userId: AUTHOR_ID,
+      body:   { title: 'Browse Col B', visibility: 'FREE' },
+    }))
+
+    const res = await callHandler(makeEvent('GET', '/collections', {}))
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    const item = body.items[0]
+    expect(item).toHaveProperty('collectionId')
+    expect(item).toHaveProperty('title')
+    expect(item).toHaveProperty('visibility', 'FREE')
+    expect(item).toHaveProperty('authorId', AUTHOR_ID)
+    expect(item).toHaveProperty('authorDisplayName')
+    expect(item).toHaveProperty('pieceCount')
+    expect(item).toHaveProperty('posterUrl')
+    expect(item).toHaveProperty('createdAt')
+  })
+
+  it('does NOT include SUBSCRIBER_ONLY collections', async () => {
+    await seedAuthorProfile()
+    await Promise.all([
+      callHandler(makeEvent('POST', '/collections', {
+        userId: AUTHOR_ID,
+        body:   { title: 'Visible Free', visibility: 'FREE' },
+      })),
+      callHandler(makeEvent('POST', '/collections', {
+        userId: AUTHOR_ID,
+        body:   { title: 'Hidden Sub Only', visibility: 'SUBSCRIBER_ONLY' },
+      })),
+    ])
+
+    const res = await callHandler(makeEvent('GET', '/collections', {}))
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.items.every((c: { visibility: string }) => c.visibility === 'FREE')).toBe(true)
+    expect(body.items.some((c: { title: string }) => c.title === 'Hidden Sub Only')).toBe(false)
+  })
+
+  it('returns empty items array when no FREE collections exist', async () => {
+    await seedAuthorProfile()
+    await callHandler(makeEvent('POST', '/collections', {
+      userId: AUTHOR_ID,
+      body:   { title: 'Sub Only', visibility: 'SUBSCRIBER_ONLY' },
+    }))
+
+    const res = await callHandler(makeEvent('GET', '/collections', {}))
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.items).toHaveLength(0)
+    expect(body).not.toHaveProperty('cursor')
+  })
+
+  it('paginates correctly — cursor from page 1 fetches page 2', async () => {
+    await seedAuthorProfile()
+    for (let i = 1; i <= 3; i++) {
+      await callHandler(makeEvent('POST', '/collections', {
+        userId: AUTHOR_ID,
+        body:   { title: `Paginate Col ${i}`, visibility: 'FREE' },
+      }))
+    }
+
+    const page1Res = await callHandler(makeEvent('GET', '/collections', {
+      queryStringParameters: { limit: '2', sort: 'newest' },
+    }))
+    expect(page1Res.statusCode).toBe(200)
+    const page1 = JSON.parse(page1Res.body)
+    expect(page1.items).toHaveLength(2)
+    expect(page1).toHaveProperty('cursor')
+
+    const page2Res = await callHandler(makeEvent('GET', '/collections', {
+      queryStringParameters: { limit: '2', sort: 'newest', cursor: page1.cursor },
+    }))
+    expect(page2Res.statusCode).toBe(200)
+    const page2 = JSON.parse(page2Res.body)
+    expect(page2.items).toHaveLength(1)
+    expect(page2).not.toHaveProperty('cursor')
+
+    const allIds = [...page1.items, ...page2.items].map((c: { collectionId: string }) => c.collectionId)
+    expect(new Set(allIds).size).toBe(3)
+  })
+
+  it('returns 400 for invalid sort parameter', async () => {
+    const res = await callHandler(makeEvent('GET', '/collections', {
+      queryStringParameters: { sort: 'oldest' },
+    }))
+    expect(res.statusCode).toBe(400)
+  })
+})

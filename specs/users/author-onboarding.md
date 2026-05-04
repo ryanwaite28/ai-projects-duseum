@@ -3,6 +3,7 @@
 **Status**: ✅ Implemented
 **FR coverage**: FR-AUTH-PROF-01, FR-AUTH-PROF-05, FR-AUTH-PROF-06, FR-AUTH-PROF-07, FR-AUTH-PROF-08, FR-AUTH-PROF-09
 **Relevant PROJECT.md sections**: 2.4, 4.2, 8
+**Related spec**: `specs/users/author-profile-images.md` — icon & wallpaper upload UI, `authorIconUrl` in artwork response, and display changes on author profile and artwork detail pages
 
 **What this implements**: The opt-in Author profile creation flow including display name, bio, profile photo, cover photo, optional subscription price; Author dashboard data; Author public profile page.
 

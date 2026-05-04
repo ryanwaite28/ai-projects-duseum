@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button'
 import { PageLayout } from '../components/layout/PageLayout'
 import { DailyFeaturedSpotlight } from '../components/home/DailyFeaturedSpotlight'
 import { WeeklyFeaturedCarousel } from '../components/home/WeeklyFeaturedCarousel'
+import { ExploreCollectionsSection } from '../components/home/ExploreCollectionsSection'
 import { ArtworkGrid, ArtworkGridSkeleton } from '../components/artwork/ArtworkGrid'
 import { useArtworks } from '../hooks/use-artworks'
 import { useDailyFeatured, useWeeklyFeatured } from '../hooks/use-features'
@@ -104,6 +105,7 @@ function FeaturedSections() {
     <>
       <DailyFeaturedSpotlight data={dailyData}   isLoading={dailyLoading} />
       <WeeklyFeaturedCarousel data={weeklyData}  isLoading={weeklyLoading} />
+      <ExploreCollectionsSection />
     </>
   )
 }

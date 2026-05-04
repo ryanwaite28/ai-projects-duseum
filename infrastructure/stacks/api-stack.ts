@@ -317,6 +317,7 @@ export class ApiStack extends cdk.Stack {
     route('RoutePostArtwork',       'POST /artworks',                 artworksIntegration, 'JWT')
     route('RoutePutArtwork',        'PUT /artworks/{artworkId}',      artworksIntegration, 'JWT')
     route('RouteDeleteArtwork',          'DELETE /artworks/{artworkId}',                          artworksIntegration, 'JWT')
+    route('RouteGetCollections',          'GET /collections',                                      artworksIntegration, 'NONE')
     route('RoutePostCollection',         'POST /collections',                                     artworksIntegration, 'JWT')
     route('RouteGetCollection',          'GET /collections/{collectionId}',                       artworksIntegration, 'NONE')
     route('RoutePutCollection',          'PUT /collections/{collectionId}',                       artworksIntegration, 'JWT')

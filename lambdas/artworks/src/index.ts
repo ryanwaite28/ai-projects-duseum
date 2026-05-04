@@ -13,6 +13,7 @@
 //   DELETE /artworks/{artworkId}                    → deleteArtwork   (Author only)
 //
 // Collection routes (§4.2 — collections assigned to artworks-lambda):
+//   GET    /collections                             → listCollections   (public — browse FREE collections, FR-DISC-07)
 //   POST   /collections                             → createCollection  (Author only)
 //   GET    /collections/{collectionId}              → getCollection     (public, optional JWT)
 //   PUT    /collections/{collectionId}              → updateCollection  (Author only)
@@ -45,6 +46,7 @@ import { addCollectionPieceRoute }  from './routes/add-collection-piece.js'
 import { removeCollectionPieceRoute } from './routes/remove-collection-piece.js'
 import { listCollectionPiecesRoute }   from './routes/list-collection-pieces.js'
 import { listAuthorCollectionsRoute }  from './routes/list-author-collections.js'
+import { listCollectionsRoute }       from './routes/list-collections.js'
 import { listMyArtworks }             from './routes/list-my-artworks.js'
 
 const dispatch = async (
@@ -72,6 +74,7 @@ const dispatch = async (
   if (seg0 === 'collections') {
     const collectionId = seg1
 
+    if (method === 'GET'    && !collectionId)       return listCollectionsRoute(event, context)
     if (method === 'POST'   && !collectionId)       return createCollectionRoute(event, context)
     if (method === 'GET'    && collectionId && !seg2) return getCollectionRoute(event, context, collectionId)
     if (method === 'PUT'    && collectionId && !seg2) return updateCollectionRoute(event, context, collectionId)

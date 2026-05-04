@@ -193,6 +193,16 @@ export class StorageStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     })
 
+    // ── GSI-AllFreeCollections ────────────────────────────────────────────────
+    // Browse all FREE collections globally (FR-DISC-06/07)
+    // Only FREE collection METADATA items carry collectionBrowse='FREE' (sparse)
+    this.mainTable.addGlobalSecondaryIndex({
+      indexName:    'GSI-AllFreeCollections',
+      partitionKey: { name: 'collectionBrowse', type: dynamodb.AttributeType.STRING },
+      sortKey:      { name: 'createdAt',         type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    })
+
     // =========================================================================
     // DynamoDB — Idempotency Table (Stripe event deduplication)
     // =========================================================================
