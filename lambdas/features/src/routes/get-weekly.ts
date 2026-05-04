@@ -63,7 +63,8 @@ export const getWeeklyFeature = async (
       return {
         authorId:       author.userId,
         displayName:    author.displayName,
-        coverPhotoUrl:  author.coverPhotoS3Key ? publicUrl(author.coverPhotoS3Key) : null,
+        avatarUrl:      author.profilePhotoS3Key ? publicUrl(author.profilePhotoS3Key) : null,
+        coverPhotoUrl:  author.coverPhotoS3Key   ? publicUrl(author.coverPhotoS3Key)   : null,
         recentPieces:   galleryResult.items.map((p) => ({
           artworkId:    p.artworkId,
           title:        p.title,

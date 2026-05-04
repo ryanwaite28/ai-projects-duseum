@@ -1,10 +1,11 @@
 import { api } from './api'
-import type { AuthorCollection } from '../types/artwork'
+import type { AuthorCollection, BrowseCollection } from '../types/artwork'
 
 export interface CollectionBody {
   title:        string
   description?: string
   visibility:   'FREE' | 'SUBSCRIBER_ONLY'
+  posterS3Key?: string | null
 }
 
 export interface CollectionPiece {
@@ -17,6 +18,13 @@ export interface CollectionPiecesResponse {
 }
 
 export const collectionsService = {
+  browse: (params: { limit?: number; cursor?: string } = {}) => {
+    const qs = new URLSearchParams({ sort: 'newest' })
+    if (params.limit)  qs.set('limit',  String(params.limit))
+    if (params.cursor) qs.set('cursor', params.cursor)
+    return api.get<{ items: BrowseCollection[]; cursor?: string }>(`/collections?${qs}`)
+  },
+
   listMy: (authorId: string) =>
     api.get<{ items: AuthorCollection[] }>(`/authors/${authorId}/collections`),
 

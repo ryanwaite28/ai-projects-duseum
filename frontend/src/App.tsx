@@ -8,6 +8,7 @@ import { AdminGuard } from './middleware/admin-guard'
 
 const HomePage                   = lazy(() => import('./pages/home'))
 const BrowsePage                 = lazy(() => import('./pages/browse'))
+const BrowseCollectionsPage      = lazy(() => import('./pages/browse-collections'))
 const AuthorsPage                = lazy(() => import('./pages/authors'))
 const ArtworkDetailPage          = lazy(() => import('./pages/artwork-detail'))
 const AuthorProfilePage          = lazy(() => import('./pages/author-profile'))
@@ -53,6 +54,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/"                       element={<HomePage />} />
         <Route path="/browse"                 element={<BrowsePage />} />
+        <Route path="/browse/collections"     element={<BrowseCollectionsPage />} />
         <Route path="/authors"                element={<AuthorsPage />} />
         <Route path="/authors/:authorId"      element={<AuthorProfilePage />} />
         <Route path="/artworks/:artworkId"    element={<ArtworkDetailPage />} />

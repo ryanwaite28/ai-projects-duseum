@@ -58,5 +58,15 @@ export const listAuthors = (opts?: {
   return api.get(`/authors${qs ? `?${qs}` : ''}`)
 }
 
+export const updateAuthorProfile = (patch: Partial<{
+  displayName:                  string
+  bio:                          string
+  profilePhotoS3Key:            string | null
+  coverPhotoS3Key:              string | null
+  featuredPieceIds:             string[]
+  authorSubscriptionMonthlyUsd: number | null
+}>): Promise<unknown> =>
+  api.put('/users/me/author', patch)
+
 export const getAuthorCollections = (authorId: string): Promise<{ items: AuthorCollection[] }> =>
   api.get(`/authors/${authorId}/collections`)

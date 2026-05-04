@@ -5,7 +5,9 @@ import { PageLayout } from '../../components/layout/PageLayout'
 import { EyebrowLabel } from '../../components/ui/EyebrowLabel'
 import { GoldDivider } from '../../components/ui/GoldDivider'
 import { Button } from '../../components/ui/Button'
+import { ProfileImageUpload } from '../../components/ui/ProfileImageUpload'
 import { useMe, useMeQueryKey } from '../../hooks/use-me'
+import { useAuthor, authorQueryKey } from '../../hooks/use-author'
 import { useAuthStore } from '../../store/auth.store'
 import { api } from '../../services/api'
 
@@ -36,6 +38,7 @@ function CopyLinkButton({ url }: { url: string }) {
 function AccountSettings() {
   const { user } = useAuthStore()
   const { data: me, isLoading } = useMe()
+  const { data: authorData } = useAuthor(user?.userId ?? '')
   const qc = useQueryClient()
 
   const [displayName, setDisplayName] = useState('')
@@ -146,6 +149,36 @@ function AccountSettings() {
               </button>
             </Link>
           </div>
+
+          {/* Profile images — Author only */}
+          {me?.authorProfile && user && (
+            <div className="mt-12 pt-8 border-t border-gold/10">
+              <p className="text-[0.68rem] font-medium tracking-[0.2em] uppercase text-gold mb-4">
+                Profile Images
+              </p>
+              <h2 className="font-display text-[1.2rem] font-normal text-warm-white mb-8">
+                Icon &amp; wallpaper
+              </h2>
+              <div className="space-y-10">
+                <ProfileImageUpload
+                  label="Icon"
+                  description="Square avatar shown next to your name. JPEG, PNG, WEBP or GIF, max 20 MB."
+                  currentUrl={authorData?.avatarUrl ?? null}
+                  field="profilePhotoS3Key"
+                  aspectClass="aspect-square max-w-[160px]"
+                  onSuccess={() => qc.invalidateQueries({ queryKey: authorQueryKey(user.userId) })}
+                />
+                <ProfileImageUpload
+                  label="Wallpaper"
+                  description="Full-width banner shown at the top of your author page. JPEG, PNG, WEBP or GIF, max 20 MB."
+                  currentUrl={authorData?.coverPhotoUrl ?? null}
+                  field="coverPhotoS3Key"
+                  aspectClass="aspect-[16/5]"
+                  onSuccess={() => qc.invalidateQueries({ queryKey: authorQueryKey(user.userId) })}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Shareable profile links — Author only (FR-AUTH-PROF-07) */}
           {me?.authorProfile && user && (

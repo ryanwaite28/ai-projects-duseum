@@ -1,10 +1,89 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useMe } from '../../../hooks/use-me'
-import { listMyArtworks } from '../../../services/artworks.service'
+import { getUploadIntent, listMyArtworks, uploadToS3 } from '../../../services/artworks.service'
 import { collectionsService } from '../../../services/collections.service'
 import type { AuthorCollection } from '../../../types/artwork'
 import type { CollectionBody, CollectionPiece } from '../../../services/collections.service'
+
+// ── Lightweight poster uploader (upload-intent → S3 only; key stored in state) ─
+
+const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const MAX_MB   = 20 * 1024 * 1024
+
+function PosterUpload({
+  currentUrl,
+  onKeyReady,
+}: {
+  currentUrl: string | null
+  onKeyReady: (key: string | null) => void
+}) {
+  const inputRef                  = useRef<HTMLInputElement>(null)
+  const [preview, setPreview]     = useState<string | null>(currentUrl)
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress]   = useState(0)
+  const [error, setError]         = useState<string | null>(null)
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!ALLOWED.includes(file.type)) { setError('Unsupported type. JPEG, PNG, WEBP or GIF only.'); return }
+    if (file.size > MAX_MB)           { setError('Max size is 20 MB.'); return }
+
+    setError(null)
+    setUploading(true)
+    setProgress(0)
+    try {
+      const { uploadUrl, s3Key } = await getUploadIntent({ fileName: file.name, mimeType: file.type, sizeBytes: file.size })
+      await uploadToS3(uploadUrl, file, (pct) => setProgress(pct))
+      setPreview(URL.createObjectURL(file))
+      onKeyReady(s3Key)
+    } catch {
+      setError('Upload failed. Please try again.')
+    } finally {
+      setUploading(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div>
+      <label className="block text-[0.68rem] tracking-[0.14em] uppercase text-stone-light mb-1">Poster image</label>
+      <div className="aspect-[16/9] w-full bg-ink border border-gold/15 rounded-sm overflow-hidden mb-2">
+        {preview
+          ? <img src={preview} alt="Poster" className="w-full h-full object-cover" />
+          : <div className="w-full h-full flex items-center justify-center"><span className="font-display italic text-stone-light/40 text-xs">No poster</span></div>
+        }
+      </div>
+      {uploading && (
+        <div className="w-full h-0.5 bg-ink-raised rounded-full mb-2 overflow-hidden">
+          <div className="h-full bg-gold transition-all duration-200" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+      {error && <p className="text-[0.75rem] text-[#c0544a] mb-2">{error}</p>}
+      <div className="flex gap-2">
+        <input ref={inputRef} type="file" accept={ALLOWED.join(',')} className="hidden" onChange={handleFile} />
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => { setError(null); inputRef.current?.click() }}
+          className="text-[0.72rem] font-medium uppercase tracking-[0.06em] text-gold border border-gold/30 hover:border-gold/60 px-3 py-1.5 rounded-sm transition-colors disabled:opacity-40"
+        >
+          {uploading ? `${progress}%` : preview ? 'Replace' : 'Choose'}
+        </button>
+        {preview && (
+          <button
+            type="button"
+            onClick={() => { setPreview(null); onKeyReady(null) }}
+            className="text-[0.72rem] font-medium uppercase tracking-[0.06em] text-stone-light hover:text-[#c0544a] transition-colors"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
 
 // ── New / Edit collection modal ───────────────────────────────────────────────
 
@@ -17,14 +96,21 @@ function CollectionModal({
   onClose: () => void
   onSaved: () => void
 }) {
-  const [title,       setTitle]       = useState(initial?.title ?? '')
-  const [description, setDescription] = useState(initial?.description ?? '')
-  const [visibility,  setVisibility]  = useState<'FREE' | 'SUBSCRIBER_ONLY'>(initial?.visibility ?? 'FREE')
-  const [error,       setError]       = useState<string | null>(null)
+  const [title,        setTitle]        = useState(initial?.title ?? '')
+  const [description,  setDescription]  = useState(initial?.description ?? '')
+  const [visibility,   setVisibility]   = useState<'FREE' | 'SUBSCRIBER_ONLY'>(initial?.visibility ?? 'FREE')
+  const [posterS3Key,    setPosterS3Key]    = useState<string | null>(null)
+  const [posterTouched,  setPosterTouched]  = useState(false)
+  const [error,          setError]          = useState<string | null>(null)
 
   const save = useMutation({
     mutationFn: () => {
-      const body: CollectionBody = { title, description: description || undefined, visibility }
+      const body: CollectionBody = {
+        title,
+        description: description || undefined,
+        visibility,
+        ...(posterTouched ? { posterS3Key } : {}),
+      }
       return initial
         ? collectionsService.update(initial.collectionId, body)
         : collectionsService.create(body)
@@ -68,6 +154,10 @@ function CollectionModal({
               <option value="SUBSCRIBER_ONLY">Subscribers only</option>
             </select>
           </div>
+          <PosterUpload
+            currentUrl={initial?.posterUrl ?? null}
+            onKeyReady={(key) => { setPosterS3Key(key); setPosterTouched(true) }}
+          />
           {error && <p className="text-[0.8rem] text-[#c0544a]">{error}</p>}
         </div>
 

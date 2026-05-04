@@ -44,6 +44,7 @@ export interface Artwork {
   description:        string | null
   authorId:           string
   authorDisplayName:  string
+  authorIconUrl:      string | null
   category:           ArtworkCategory
   tags:               string[]
   imageUrl:           string | null
@@ -122,8 +123,21 @@ export interface AuthorCollection {
   title:         string
   description:   string | null
   coverPieceUrl: string | null
+  posterUrl:     string | null
   pieceCount:    number
   visibility:    'FREE' | 'SUBSCRIBER_ONLY'
+}
+
+export interface BrowseCollection {
+  collectionId:      string
+  title:             string
+  description:       string | null
+  visibility:        'FREE'
+  posterUrl:         string | null
+  authorId:          string
+  authorDisplayName: string
+  pieceCount:        number
+  createdAt:         string
 }
 
 // ── Comment ───────────────────────────────────────────────────────────────────

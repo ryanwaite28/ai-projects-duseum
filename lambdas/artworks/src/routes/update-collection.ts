@@ -27,11 +27,12 @@ const PieceOrderEntrySchema = z.object({
 })
 
 const UpdateCollectionSchema = z.object({
-  title:       z.string().min(1).max(100).optional(),
-  description: z.string().max(500).optional(),
-  pieceOrder:  z.array(PieceOrderEntrySchema).optional(),
+  title:        z.string().min(1).max(100).optional(),
+  description:  z.string().max(500).optional(),
+  posterS3Key:  z.string().min(1).nullable().optional(),
+  pieceOrder:   z.array(PieceOrderEntrySchema).optional(),
 }).refine(
-  (v) => v.title !== undefined || v.description !== undefined || v.pieceOrder !== undefined,
+  (v) => v.title !== undefined || v.description !== undefined || v.posterS3Key !== undefined || v.pieceOrder !== undefined,
   { message: 'At least one field must be provided' }
 )
 
@@ -49,9 +50,10 @@ export const updateCollectionRoute = async (
   const body = validateBody(UpdateCollectionSchema, event.body)
 
   // Update metadata fields if any provided
-  const metaPatch: { title?: string; description?: string } = {}
-  if (body.title       !== undefined) metaPatch.title       = body.title
-  if (body.description !== undefined) metaPatch.description = body.description
+  const metaPatch: { title?: string; description?: string; posterS3Key?: string | null } = {}
+  if (body.title        !== undefined) metaPatch.title        = body.title
+  if (body.description  !== undefined) metaPatch.description  = body.description
+  if (body.posterS3Key  !== undefined) metaPatch.posterS3Key  = body.posterS3Key
 
   let updated = collection
   if (Object.keys(metaPatch).length > 0) {

@@ -3,6 +3,7 @@
 **Status**: ✅ Implemented
 **FR coverage**: FR-COL-01, FR-COL-02, FR-COL-03, FR-COL-04, FR-COL-05, FR-COL-06
 **Relevant PROJECT.md sections**: 2.6, 4.7, 8
+**Related specs**: `specs/artworks/collection-poster-image.md` (FR-COL-07 — poster image, not yet implemented)
 
 **What this implements**: Create, read, update, delete Collections; visibility settings; piece membership management; access-tier-adjusted piece counts.
 
@@ -21,6 +22,8 @@
 - `lambdas/artworks/src/routes/update-collection.ts` — `PUT /collections/{collectionId}`
 - `lambdas/artworks/src/routes/delete-collection.ts` — `DELETE /collections/{collectionId}`
 - `lambdas/artworks/src/routes/list-author-collections.ts` — `GET /collections?authorId={id}`
+- `lambdas/users/src/routes/get-author-collections.ts` — `GET /authors/{authorId}/collections`; subscriber check added (FR-COL-03 bug fix)
+- `lambdas/users/src/__tests__/users.integration.test.ts` — 2 regression tests: active subscriber sees SUBSCRIBER_ONLY; cancelled sub does not
 - `packages/shared/src/db/collections.repository.ts` — full collection CRUD + membership operations
 
 **DynamoDB access patterns used**:
