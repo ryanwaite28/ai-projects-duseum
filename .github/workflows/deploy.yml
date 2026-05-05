@@ -1,0 +1,193 @@
+name: Deploy — dev → prod
+
+# Combined pipeline: deploys dev fully (CI → build → CDK → frontend → dep-check →
+# smoke tests), waits for a single manual approval via "prod-approval" environment,
+# then deploys prod the same way.
+#
+# "prod" GitHub Environment carries no protection rules — only "prod-approval" does.
+# Prod build and pre-deploy check run in parallel with the dev pipeline so they're
+# already done by the time the reviewer is prompted.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # ── Gate: all CI checks must pass ────────────────────────────────────────────
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  # ── Build Lambda ZIPs — dev ──────────────────────────────────────────────────
+  # Runs in PARALLEL with build-prod and pre-deploy-check-dev.
+  build-dev:
+    name: Build (dev)
+    needs: [ci]
+    uses: ./.github/workflows/_build-lambdas.yml
+    with:
+      sha: ${{ github.sha }}
+      env: dev
+      environment: build
+    secrets:
+      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_BUILD }}
+
+  # ── Build Lambda ZIPs — prod ─────────────────────────────────────────────────
+  # Runs in PARALLEL with build-dev and the dev pipeline so prod is ready to go
+  # the moment the reviewer approves.
+  build-prod:
+    name: Build (prod)
+    needs: [ci]
+    uses: ./.github/workflows/_build-lambdas.yml
+    with:
+      sha: ${{ github.sha }}
+      env: prod
+      environment: build
+    secrets:
+      AWS_ROLE_ARN_BUILD: ${{ secrets.AWS_ROLE_ARN_BUILD }}
+
+  # ── Bootstrap prerequisites check — dev (parallel with build-dev) ─────────────
+  pre-deploy-check-dev:
+    name: Bootstrap Check (dev)
+    needs: [ci]
+    uses: ./.github/workflows/_pre-deploy-check.yml
+    with:
+      environment: dev
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+
+  # ── Bootstrap prerequisites check — prod (parallel with dev pipeline) ─────────
+  # Runs early so it's already done when the reviewer approves prod-gate.
+  pre-deploy-check-prod:
+    name: Bootstrap Check (prod)
+    needs: [ci]
+    uses: ./.github/workflows/_pre-deploy-check.yml
+    with:
+      environment: prod
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+
+  # ── Deploy CDK stacks to dev ─────────────────────────────────────────────────
+  deploy-dev:
+    name: Deploy (dev)
+    needs: [build-dev, pre-deploy-check-dev]
+    uses: ./.github/workflows/_cdk-deploy.yml
+    with:
+      environment: dev
+      sha: ${{ github.sha }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+
+  # ── Deploy frontend SPA to dev ───────────────────────────────────────────────
+  deploy-frontend-dev:
+    name: Deploy Frontend (dev)
+    needs: [deploy-dev]
+    uses: ./.github/workflows/_deploy-frontend.yml
+    with:
+      environment: dev
+      sha: ${{ github.sha }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+
+  # ── Runtime dependency check — dev ───────────────────────────────────────────
+  dep-check-dev:
+    name: Dependency Check (dev)
+    needs: [deploy-frontend-dev]
+    uses: ./.github/workflows/_dep-check.yml
+    with:
+      environment: dev
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+
+  # ── Smoke tests — dev ────────────────────────────────────────────────────────
+  smoke-test-dev:
+    name: Smoke Test (dev)
+    needs: [dep-check-dev]
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY_DEV }}
+          aws-region: us-east-1
+      - name: Run smoke tests
+        run: bash scripts/smoke-test.sh dev ${{ github.sha }}
+
+  # ── Single manual approval gate for prod ─────────────────────────────────────
+  # Gated on: dev smoke tests passing + prod build + prod bootstrap check.
+  # Uses "prod-approval" environment (has protection rules / required reviewers).
+  # All downstream prod jobs reference "prod" (no protection rules), so this is
+  # the only point where a reviewer is prompted.
+  prod-gate:
+    name: Approve prod deployment
+    needs: [smoke-test-dev, build-prod, pre-deploy-check-prod]
+    runs-on: ubuntu-latest
+    environment: prod-approval
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Prod deployment approved
+        run: echo "Approved — proceeding with prod deployment."
+
+  # ── Deploy CDK stacks to prod ─────────────────────────────────────────────────
+  # No additional approval — "prod" environment carries no protection rules.
+  deploy-prod:
+    name: Deploy (prod)
+    needs: [prod-gate]
+    uses: ./.github/workflows/_cdk-deploy.yml
+    with:
+      environment: prod
+      sha: ${{ github.sha }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+
+  # ── Deploy frontend SPA to prod ───────────────────────────────────────────────
+  deploy-frontend-prod:
+    name: Deploy Frontend (prod)
+    needs: [deploy-prod]
+    uses: ./.github/workflows/_deploy-frontend.yml
+    with:
+      environment: prod
+      sha: ${{ github.sha }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+
+  # ── Runtime dependency check — prod ──────────────────────────────────────────
+  dep-check-prod:
+    name: Dependency Check (prod)
+    needs: [deploy-frontend-prod]
+    uses: ./.github/workflows/_dep-check.yml
+    with:
+      environment: prod
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+
+  # ── Smoke tests — prod ────────────────────────────────────────────────────────
+  smoke-test-prod:
+    name: Smoke Test (prod)
+    needs: [dep-check-prod]
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY_PROD }}
+          aws-region: us-east-1
+      - name: Run smoke tests
+        run: bash scripts/smoke-test.sh prod ${{ github.sha }}
