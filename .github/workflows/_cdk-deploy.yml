@@ -19,6 +19,9 @@ on:
         required: true
         description: IAM role ARN to assume via OIDC for this environment
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     name: CDK Deploy (${{ inputs.environment }})

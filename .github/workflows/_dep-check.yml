@@ -23,6 +23,9 @@ on:
         required: true
         description: IAM role ARN to assume via OIDC for this environment
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   dep-check:
     name: Dependency Check (${{ inputs.environment }})
