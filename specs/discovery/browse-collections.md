@@ -3,7 +3,7 @@
 **Status**: ✅ Implemented
 **FR coverage**: FR-DISC-06, FR-DISC-07
 **Relevant PROJECT.md sections**: 2.8, 4.7, 6.8, 8
-**Related specs**: `specs/artworks/collection-poster-image.md` (posterUrl), `specs/discovery/browse-artworks.md` (pattern reference), `specs/artworks/collections-crud.md`
+**Related specs**: `specs/artworks/collection-poster-image.md` (posterUrl), `specs/discovery/browse-artworks.md` (pattern reference), `specs/artworks/collections-crud.md`, `specs/discovery/browse-atrium-collection-detail.md` (atrium links to `/browse/collections`; CollectionCard now links to collection detail)
 
 **What this implements**: Two new discovery surfaces for FREE collections — (1) an "Explore Collections" section on the public homepage showing up to 6 randomly sampled FREE collections, and (2) a dedicated `/browse/collections` frontend page backed by a new `GET /collections` Lambda route. Both use the new `GSI-AllFreeCollections` DynamoDB index.
 

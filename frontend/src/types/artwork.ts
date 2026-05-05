@@ -140,6 +140,23 @@ export interface BrowseCollection {
   createdAt:         string
 }
 
+export type CollectionAccess = 'GRANTED' | 'SUBSCRIBER_ONLY_GATED' | 'AUTH_REQUIRED'
+
+export interface CollectionDetail {
+  collectionId:      string
+  ownerId:           string
+  title:             string
+  description:       string | null
+  visibility:        'FREE' | 'SUBSCRIBER_ONLY'
+  posterUrl:         string | null
+  createdAt:         string
+  updatedAt:         string
+  access:            CollectionAccess
+  pieces:            ArtworkListItem[]
+  totalPieceCount:   number
+  visiblePieceCount: number
+}
+
 // ── Comment ───────────────────────────────────────────────────────────────────
 
 export interface ArtworkComment {
