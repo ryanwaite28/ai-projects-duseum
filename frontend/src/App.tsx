@@ -7,8 +7,10 @@ import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { AdminGuard } from './middleware/admin-guard'
 
 const HomePage                   = lazy(() => import('./pages/home'))
+const BrowseAtriumPage           = lazy(() => import('./pages/browse-atrium'))
 const BrowsePage                 = lazy(() => import('./pages/browse'))
 const BrowseCollectionsPage      = lazy(() => import('./pages/browse-collections'))
+const CollectionDetailPage       = lazy(() => import('./pages/collection-detail'))
 const AuthorsPage                = lazy(() => import('./pages/authors'))
 const ArtworkDetailPage          = lazy(() => import('./pages/artwork-detail'))
 const AuthorProfilePage          = lazy(() => import('./pages/author-profile'))
@@ -53,8 +55,10 @@ function AppRoutes() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/"                       element={<HomePage />} />
-        <Route path="/browse"                 element={<BrowsePage />} />
+        <Route path="/browse"                 element={<BrowseAtriumPage />} />
+        <Route path="/browse/pieces"          element={<BrowsePage />} />
         <Route path="/browse/collections"     element={<BrowseCollectionsPage />} />
+        <Route path="/collections/:collectionId" element={<CollectionDetailPage />} />
         <Route path="/authors"                element={<AuthorsPage />} />
         <Route path="/authors/:authorId"      element={<AuthorProfilePage />} />
         <Route path="/artworks/:artworkId"    element={<ArtworkDetailPage />} />

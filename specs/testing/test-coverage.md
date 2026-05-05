@@ -114,6 +114,17 @@
 | features integration | `GET /features/homepage` `exploreCollections` array (not implemented — `ExploreCollectionsSection` fetches independently) | N/A |
 | frontend component | `ExploreCollectionsSection` renders skeleton, cards, empty state | ❌ |
 
+### Browse Atrium + Collection Detail Tests — FR-DISC-08, FR-COL-08
+
+| Scope | What | Status |
+|---|---|---|
+| artworks integration | `GET /collections/{id}` unauthenticated + SUBSCRIBER_ONLY → 200 `access: AUTH_REQUIRED` | ✅ |
+| artworks integration | `GET /collections/{id}` non-subscriber + SUBSCRIBER_ONLY → 200 `access: SUBSCRIBER_ONLY_GATED` | ✅ |
+| artworks integration | `GET /collections/{id}` active subscriber + SUBSCRIBER_ONLY → 200 `access: GRANTED` | ✅ |
+| frontend service | `collectionsService.getById` URL, GRANTED shape, SUBSCRIBER_ONLY_GATED shape, AUTH_REQUIRED shape | ✅ |
+| frontend component | `BrowseAtriumPage` — three lane cards, correct hrefs | ❌ |
+| frontend component | `CollectionDetailPage` — GRANTED renders grid, SUBSCRIBER_ONLY_GATED renders gate, AUTH_REQUIRED renders gate + login link | ❌ |
+
 ### Transactional Email Tests — Gap Analysis (FR-NOTIF-12)
 
 > Tests for the email module (`specs/notifications/transactional-emails.md`) are not yet written.

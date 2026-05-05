@@ -180,7 +180,6 @@ export default function AuthorProfilePage() {
                   coverPieceUrl={col.coverPieceUrl}
                   pieceCount={col.pieceCount}
                   visibility={col.visibility}
-                  disableLink
                 />
               ))}
             </div>

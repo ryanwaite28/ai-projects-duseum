@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { AuthorCollection, BrowseCollection } from '../types/artwork'
+import type { AuthorCollection, BrowseCollection, CollectionDetail } from '../types/artwork'
 
 export interface CollectionBody {
   title:        string
@@ -18,6 +18,9 @@ export interface CollectionPiecesResponse {
 }
 
 export const collectionsService = {
+  getById: (collectionId: string) =>
+    api.get<CollectionDetail>(`/collections/${collectionId}`),
+
   browse: (params: { limit?: number; cursor?: string } = {}) => {
     const qs = new URLSearchParams({ sort: 'newest' })
     if (params.limit)  qs.set('limit',  String(params.limit))
