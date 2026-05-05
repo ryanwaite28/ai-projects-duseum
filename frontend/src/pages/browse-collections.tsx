@@ -84,7 +84,6 @@ export default function BrowseCollectionsPage() {
                     title={col.title}
                     description={col.description}
                     posterUrl={col.posterUrl}
-                    authorId={col.authorId}
                     authorDisplayName={col.authorDisplayName}
                     pieceCount={col.pieceCount}
                     visibility={col.visibility}

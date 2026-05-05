@@ -1,6 +1,7 @@
-// FR-COL-07, FR-DISC-06, FR-DISC-07
+// FR-COL-07, FR-DISC-06, FR-DISC-07, FR-COL-08
 // Shared card used on author profile, homepage Explore Collections, and browse-collections page.
 // Image priority: posterUrl → coverPieceUrl → branded placeholder.
+// Links to /collections/:collectionId (FR-COL-08). Pass disableLink to suppress.
 
 import { Link } from 'react-router-dom'
 
@@ -10,11 +11,10 @@ interface CollectionCardProps {
   description?:       string | null
   posterUrl?:         string | null
   coverPieceUrl?:     string | null
-  authorId?:          string
   authorDisplayName?: string
   pieceCount?:        number
   visibility:         'FREE' | 'SUBSCRIBER_ONLY'
-  /** When false (default), wrap in a link to the author's profile. Pass true to suppress. */
+  /** Suppress the link wrapper (e.g. when already inside a clickable container). */
   disableLink?:       boolean
 }
 
@@ -24,7 +24,6 @@ export function CollectionCard({
   description,
   posterUrl,
   coverPieceUrl,
-  authorId,
   authorDisplayName,
   pieceCount,
   visibility,
@@ -85,12 +84,12 @@ export function CollectionCard({
     </div>
   )
 
-  if (disableLink || !authorId) return <div key={collectionId}>{inner}</div>
+  if (disableLink) return <div key={collectionId}>{inner}</div>
 
   return (
     <Link
       key={collectionId}
-      to={`/authors/${authorId}`}
+      to={`/collections/${collectionId}`}
       className="block no-underline h-full"
     >
       {inner}

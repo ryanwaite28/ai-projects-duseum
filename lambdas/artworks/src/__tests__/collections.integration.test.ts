@@ -234,7 +234,7 @@ describe('Collection lifecycle: add pieces → GET access-tier filtering', () =>
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('SUBSCRIBER_ONLY collection access control', () => {
-  it('returns 403 to unauthenticated viewer for SUBSCRIBER_ONLY collection', async () => {
+  it('returns 200 with access=AUTH_REQUIRED to unauthenticated viewer — FR-COL-08', async () => {
     await seedAuthorProfile()
 
     const createRes = await callHandler(makeEvent('POST', '/collections', {
@@ -247,10 +247,15 @@ describe('SUBSCRIBER_ONLY collection access control', () => {
     const res = await callHandler(makeEvent('GET', `/collections/${collectionId}`, {
       pathParameters: { collectionId },
     }))
-    expect(res.statusCode).toBe(403)
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.access).toBe('AUTH_REQUIRED')
+    expect(body.pieces).toEqual([])
+    expect(body.ownerId).toBe(AUTHOR_ID)
+    expect(body.title).toBe('Subscriber-Only Collection')
   })
 
-  it('returns 403 to non-subscriber for SUBSCRIBER_ONLY collection', async () => {
+  it('returns 200 with access=SUBSCRIBER_ONLY_GATED to authenticated non-subscriber — FR-COL-08', async () => {
     await seedAuthorProfile()
 
     const createRes = await callHandler(makeEvent('POST', '/collections', {
@@ -263,10 +268,14 @@ describe('SUBSCRIBER_ONLY collection access control', () => {
       userId: FREE_VIEWER,
       pathParameters: { collectionId },
     }))
-    expect(res.statusCode).toBe(403)
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.access).toBe('SUBSCRIBER_ONLY_GATED')
+    expect(body.pieces).toEqual([])
+    expect(body.ownerId).toBe(AUTHOR_ID)
   })
 
-  it('returns 200 to active Author subscriber for SUBSCRIBER_ONLY collection', async () => {
+  it('returns 200 with access=GRANTED to active Author subscriber — FR-COL-08', async () => {
     await Promise.all([seedAuthorProfile(), seedAuthorSubscription(SUBSCRIBER)])
 
     const createRes = await callHandler(makeEvent('POST', '/collections', {
@@ -280,6 +289,8 @@ describe('SUBSCRIBER_ONLY collection access control', () => {
       pathParameters: { collectionId },
     }))
     expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.access).toBe('GRANTED')
   })
 })
 

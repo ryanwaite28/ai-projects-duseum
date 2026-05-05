@@ -1,17 +1,18 @@
 // =============================================================================
 // lambdas/artworks/src/routes/get-collection.ts
-// GET /collections/{collectionId} — FR-COL-02/03/06, §8.5
+// GET /collections/{collectionId} — FR-COL-02/03/06/08, §8.5
 //
-// JWT optional. PRIVATE collections require an active Author subscription.
-// Each piece is filtered by checkArtPieceAccess; response includes
-// totalPieceCount + visiblePieceCount so the frontend can display
-// "X pieces — Y visible to you" (FR-COL-06).
+// JWT optional. SUBSCRIBER_ONLY collections gated for non-subscribers: instead
+// of throwing 403, always return collection metadata + access field so the
+// frontend can render a gate UI with a subscribe CTA (FR-COL-08).
+//   access: 'GRANTED'               — viewer may see pieces
+//   access: 'SUBSCRIBER_ONLY_GATED' — authenticated but not subscribed
+//   access: 'AUTH_REQUIRED'         — unauthenticated + SUBSCRIBER_ONLY
 // =============================================================================
 
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
 import type { DuseumContext } from '@duseum/shared'
 import {
-  ForbiddenError,
   NotFoundError,
   checkArtPieceAccess,
   countPublicPiecesByAuthorUpTo,
@@ -37,12 +38,25 @@ export const getCollectionRoute = async (
   const userId: string | undefined = context.userId
   const isOwner = !!userId && collection.ownerId === userId
 
-  // SUBSCRIBER_ONLY collection gate — FR-COL-03
+  const collectionMeta = {
+    collectionId:  collection.collectionId,
+    ownerId:       collection.ownerId,
+    title:         collection.title,
+    description:   collection.description,
+    visibility:    collection.visibility,
+    posterUrl:     collection.posterS3Key ? publicUrl(collection.posterS3Key) : null,
+    createdAt:     collection.createdAt,
+    updatedAt:     collection.updatedAt,
+  }
+
+  // SUBSCRIBER_ONLY gate — FR-COL-03/08: return structured response instead of 403
   if (collection.visibility === 'SUBSCRIBER_ONLY' && !isOwner) {
-    if (!userId) throw new ForbiddenError('Authentication required to view subscriber-only collections')
+    if (!userId) {
+      return ok({ ...collectionMeta, access: 'AUTH_REQUIRED' as const, pieces: [], totalPieceCount: 0, visiblePieceCount: 0 })
+    }
     const authorSub = await getAuthorSubscription(docClient, userId, collection.ownerId)
     if (authorSub?.status !== 'ACTIVE') {
-      throw new ForbiddenError('An active Author subscription is required to view this collection')
+      return ok({ ...collectionMeta, access: 'SUBSCRIBER_ONLY_GATED' as const, pieces: [], totalPieceCount: 0, visiblePieceCount: 0 })
     }
   }
 
@@ -104,9 +118,10 @@ export const getCollectionRoute = async (
   const visiblePieces = pieceResults.filter(Boolean) as PieceWithUrl[]
 
   return ok({
-    ...collection,
-    pieces:           visiblePieces,
-    totalPieceCount:  items.length,
+    ...collectionMeta,
+    access:            'GRANTED' as const,
+    pieces:            visiblePieces,
+    totalPieceCount:   items.length,
     visiblePieceCount: visiblePieces.length,
   })
 }

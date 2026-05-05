@@ -23,6 +23,39 @@ const mockDelete = vi.mocked(api.delete)
 
 beforeEach(() => vi.clearAllMocks())
 
+describe('collectionsService.getById', () => {
+  it('calls GET /collections/{collectionId}', async () => {
+    mockGet.mockResolvedValueOnce({ collectionId: 'col-001', access: 'GRANTED', pieces: [] })
+    await collectionsService.getById('col-001')
+    expect(mockGet).toHaveBeenCalledWith('/collections/col-001')
+  })
+
+  it('returns access=GRANTED shape', async () => {
+    const payload = { collectionId: 'col-001', ownerId: 'auth-001', title: 'Test', access: 'GRANTED', pieces: [{ artworkId: 'art-001' }], totalPieceCount: 1, visiblePieceCount: 1 }
+    mockGet.mockResolvedValueOnce(payload)
+    const result = await collectionsService.getById('col-001')
+    expect(result.access).toBe('GRANTED')
+    expect(result.pieces).toHaveLength(1)
+  })
+
+  it('returns access=SUBSCRIBER_ONLY_GATED shape with empty pieces', async () => {
+    const payload = { collectionId: 'col-002', ownerId: 'auth-001', title: 'Private', access: 'SUBSCRIBER_ONLY_GATED', pieces: [], totalPieceCount: 0, visiblePieceCount: 0 }
+    mockGet.mockResolvedValueOnce(payload)
+    const result = await collectionsService.getById('col-002')
+    expect(result.access).toBe('SUBSCRIBER_ONLY_GATED')
+    expect(result.pieces).toHaveLength(0)
+    expect(result.ownerId).toBe('auth-001')
+  })
+
+  it('returns access=AUTH_REQUIRED shape with ownerId for subscribe link', async () => {
+    const payload = { collectionId: 'col-003', ownerId: 'auth-001', title: 'Private', access: 'AUTH_REQUIRED', pieces: [], totalPieceCount: 0, visiblePieceCount: 0 }
+    mockGet.mockResolvedValueOnce(payload)
+    const result = await collectionsService.getById('col-003')
+    expect(result.access).toBe('AUTH_REQUIRED')
+    expect(result.ownerId).toBe('auth-001')
+  })
+})
+
 describe('collectionsService.listMy', () => {
   it('calls GET /authors/{authorId}/collections', async () => {
     mockGet.mockResolvedValueOnce({ items: [] })
