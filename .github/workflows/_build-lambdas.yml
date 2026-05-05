@@ -33,6 +33,9 @@ on:
         required: true
         description: ARN of duseum-github-actions-build — least-privilege role for duseum-cicd-artifacts
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Build & Upload Lambda ZIPs
