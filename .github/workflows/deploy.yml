@@ -9,8 +9,8 @@ name: Deploy — dev → prod
 # already done by the time the reviewer is prompted.
 
 on:
-  push:
-    branches: [main]
+  # push:
+  #   branches: [main]
   workflow_dispatch:
 
 permissions:
