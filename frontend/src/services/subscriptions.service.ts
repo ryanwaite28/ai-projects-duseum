@@ -37,6 +37,10 @@ export interface PortalResponse {
   portalUrl: string
 }
 
+export interface ConnectLoginLinkResponse {
+  loginUrl: string
+}
+
 export const subscriptionsService = {
   getMySubscriptions: () =>
     api.get<MySubscriptionsResponse>('/subscriptions/me'),
@@ -49,6 +53,9 @@ export const subscriptionsService = {
 
   createPortalSession: () =>
     api.post<PortalResponse>('/subscriptions/portal', {}),
+
+  createConnectLoginLink: () =>
+    api.post<ConnectLoginLinkResponse>('/subscriptions/connect/login-link', {}),
 
   getMySubscribers: (cursor?: string) => {
     const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''

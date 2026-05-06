@@ -391,8 +391,9 @@ export class ApiStack extends cdk.Stack {
     route('RoutePostSubsPlatform',   'POST /subscriptions/platform',         subsIntegration, 'JWT')
     route('RoutePostSubsAuthor',     'POST /subscriptions/authors/{authorId}',subsIntegration, 'JWT')
     route('RoutePostSubsPortal',       'POST /subscriptions/portal',               subsIntegration, 'JWT')
-    route('RoutePostConnectOnboard',   'POST /subscriptions/connect/onboard',      subsIntegration, 'JWT')
-    route('RouteGetConnectStatus',     'GET /subscriptions/connect/status',         subsIntegration, 'JWT')
+    route('RoutePostConnectOnboard',    'POST /subscriptions/connect/onboard',      subsIntegration, 'JWT')
+    route('RouteGetConnectStatus',     'GET /subscriptions/connect/status',          subsIntegration, 'JWT')
+    route('RoutePostConnectLoginLink', 'POST /subscriptions/connect/login-link',    subsIntegration, 'JWT')
     route('RoutePostSubPrice',         'POST /users/me/author/subscription-price',  subsIntegration, 'JWT')
     stage.node.addDependency(subsIntegration)
 

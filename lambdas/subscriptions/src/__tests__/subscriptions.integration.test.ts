@@ -60,6 +60,9 @@ vi.mock('@duseum/shared', async (importOriginal) => {
       id: 'price_test_mock_001',
     }),
     deactivatePlatformPrice: vi.fn().mockResolvedValue(undefined),
+    createConnectLoginLink: vi.fn().mockResolvedValue({
+      url: 'https://connect.stripe.com/express/dashboard/test-login-link',
+    }),
   }
 })
 
@@ -613,6 +616,48 @@ describe('GET /subscriptions/me/subscribers', () => {
 
   it('returns 401 when no JWT provided', async () => {
     const event = makeEvent('GET', '/subscriptions/me/subscribers')
+    const result = await handler(event as never, makeCtx())
+    expect(result.statusCode).toBe(401)
+  })
+})
+
+describe('POST /subscriptions/connect/login-link', () => {
+  beforeEach(async () => {
+    await seedAuthorProfile(USER_ID, {
+      stripeConnectAccountId: 'acct_test_connect_001',
+      connectChargesEnabled: true,
+    })
+  })
+
+  it('returns loginUrl when Connect account is fully set up', async () => {
+    const event = makeEvent('POST', '/subscriptions/connect/login-link', { userId: USER_ID })
+    const result = await handler(event as never, makeCtx(USER_ID))
+    expect(result.statusCode).toBe(200)
+    const body = JSON.parse(result.body)
+    expect(body.loginUrl).toBe('https://connect.stripe.com/express/dashboard/test-login-link')
+  })
+
+  it('returns 400 when author has no Connect account', async () => {
+    await seedAuthorProfile(USER_ID, { stripeConnectAccountId: null, connectChargesEnabled: null })
+    const event = makeEvent('POST', '/subscriptions/connect/login-link', { userId: USER_ID })
+    const result = await handler(event as never, makeCtx(USER_ID))
+    expect(result.statusCode).toBe(400)
+    expect(JSON.parse(result.body).error).toMatch(/No Stripe Connect account/)
+  })
+
+  it('returns 400 when Connect onboarding is incomplete (connectChargesEnabled = false)', async () => {
+    await seedAuthorProfile(USER_ID, {
+      stripeConnectAccountId: 'acct_test_connect_001',
+      connectChargesEnabled: false,
+    })
+    const event = makeEvent('POST', '/subscriptions/connect/login-link', { userId: USER_ID })
+    const result = await handler(event as never, makeCtx(USER_ID))
+    expect(result.statusCode).toBe(400)
+    expect(JSON.parse(result.body).error).toMatch(/not complete/)
+  })
+
+  it('returns 401 when no JWT provided', async () => {
+    const event = makeEvent('POST', '/subscriptions/connect/login-link')
     const result = await handler(event as never, makeCtx())
     expect(result.statusCode).toBe(401)
   })

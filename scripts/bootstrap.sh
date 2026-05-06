@@ -745,6 +745,7 @@ if $LOCAL_MODE; then
     add_route "POST /subscriptions/portal"                         "$SUB_INT"
     add_route "POST /subscriptions/connect/onboard"                "$SUB_INT"
     add_route "GET /subscriptions/connect/status"                  "$SUB_INT"
+    add_route "POST /subscriptions/connect/login-link"             "$SUB_INT"
     add_route "POST /users/me/author/subscription-price"           "$SUB_INT"
 
     # ── stripe-ingress-lambda ─────────────────────────────────────────────────
