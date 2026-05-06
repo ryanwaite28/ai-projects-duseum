@@ -130,6 +130,13 @@ export const retrieveConnectAccount = async (
   return stripe.accounts.retrieve(accountId)
 }
 
+export const createConnectLoginLink = async (
+  accountId: string
+): Promise<{ url: string }> => {
+  const stripe = await getStripeClient()
+  return stripe.accounts.createLoginLink(accountId)
+}
+
 export const createConnectPrice = async (
   params: PriceCreateParams,
   stripeAccount: string

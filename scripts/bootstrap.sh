@@ -740,11 +740,13 @@ if $LOCAL_MODE; then
     # ── subscriptions-lambda ──────────────────────────────────────────────────
     SUB_INT=$(make_integration "subscriptions")
     add_route "GET /subscriptions/me"                              "$SUB_INT"
+    add_route "GET /subscriptions/me/subscribers"                  "$SUB_INT"
     add_route "POST /subscriptions/platform"                       "$SUB_INT"
     add_route "POST /subscriptions/authors/{authorId}"             "$SUB_INT"
     add_route "POST /subscriptions/portal"                         "$SUB_INT"
     add_route "POST /subscriptions/connect/onboard"                "$SUB_INT"
     add_route "GET /subscriptions/connect/status"                  "$SUB_INT"
+    add_route "POST /subscriptions/connect/login-link"             "$SUB_INT"
     add_route "POST /users/me/author/subscription-price"           "$SUB_INT"
 
     # ── stripe-ingress-lambda ─────────────────────────────────────────────────

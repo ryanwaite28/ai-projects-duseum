@@ -103,3 +103,19 @@ describe('subscriptionsService.getMySubscribers', () => {
     expect(result.nextCursor).toBeNull()
   })
 })
+
+
+describe('subscriptionsService.createConnectLoginLink', () => {
+  it('calls POST /subscriptions/connect/login-link', async () => {
+    mockPost.mockResolvedValueOnce({ loginUrl: 'https://connect.stripe.com/express/dashboard/test' })
+    await subscriptionsService.createConnectLoginLink()
+    expect(mockPost).toHaveBeenCalledWith('/subscriptions/connect/login-link', {})
+  })
+
+  it('returns loginUrl from response', async () => {
+    const loginUrl = 'https://connect.stripe.com/express/dashboard/test'
+    mockPost.mockResolvedValueOnce({ loginUrl })
+    const result = await subscriptionsService.createConnectLoginLink()
+    expect(result.loginUrl).toBe(loginUrl)
+  })
+})
