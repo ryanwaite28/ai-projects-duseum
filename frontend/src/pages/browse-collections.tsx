@@ -18,6 +18,8 @@ export default function BrowseCollectionsPage() {
   const {
     data,
     isLoading,
+    isError,
+    refetch,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
@@ -69,6 +71,18 @@ export default function BrowseCollectionsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          ) : isError ? (
+            <div className="py-20 text-center">
+              <p className="text-[0.88rem] font-light text-stone-light mb-4">
+                Something went wrong loading collections.
+              </p>
+              <button
+                onClick={() => refetch()}
+                className="text-gold text-[0.85rem] font-light hover:underline underline-offset-2"
+              >
+                Try again
+              </button>
             </div>
           ) : items.length === 0 ? (
             <p className="text-center text-[0.88rem] font-light text-stone-light py-20">

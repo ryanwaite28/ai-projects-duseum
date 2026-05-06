@@ -68,13 +68,13 @@ export default function BrowseAtriumPage() {
       {/* Lane cards */}
       <section
         ref={ref}
-        className="reveal py-20 px-8 bg-ink-soft border-t border-gold/10"
+        className="py-20 px-8 bg-ink-soft border-t border-gold/10"
       >
         <div className="max-w-[1100px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-px bg-gold/10 border border-gold/10">
           {LANES.map((lane, i) => (
             <div
               key={lane.href}
-              className="relative bg-ink-soft p-10 overflow-hidden group transition-colors duration-300 hover:bg-gold/[0.03] flex flex-col reveal"
+              className="relative bg-ink-soft p-10 overflow-hidden group transition-colors duration-300 hover:bg-gold/[0.03] flex flex-col"
               style={{ animationDelay: `${i * 0.08}s` }}
             >
               {/* Gold top-border reveal on hover */}

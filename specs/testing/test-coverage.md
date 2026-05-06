@@ -113,6 +113,7 @@
 | artworks integration | `GET /collections` empty array when only SUBSCRIBER_ONLY collections exist | ✅ |
 | features integration | `GET /features/homepage` `exploreCollections` array (not implemented — `ExploreCollectionsSection` fetches independently) | N/A |
 | frontend component | `ExploreCollectionsSection` renders skeleton, cards, empty state | ❌ |
+| frontend component | `BrowseCollectionsPage` renders error state when API fails (not empty-state fallthrough) — FR-TESTING-06 regression | ✅ |
 
 ### Browse Atrium + Collection Detail Tests — FR-DISC-08, FR-COL-08
 
@@ -124,6 +125,7 @@
 | frontend service | `collectionsService.getById` URL, GRANTED shape, SUBSCRIBER_ONLY_GATED shape, AUTH_REQUIRED shape | ✅ |
 | frontend component | `BrowseAtriumPage` — three lane cards, correct hrefs | ❌ |
 | frontend component | `CollectionDetailPage` — GRANTED renders grid, SUBSCRIBER_ONLY_GATED renders gate, AUTH_REQUIRED renders gate + login link | ❌ |
+| data migration | `scripts/bootstrap.sh` §3.8 — `backfill_free_collection_browse_attr` run against dev + prod | ✅ (run manually) |
 
 ### Transactional Email Tests — Gap Analysis (FR-NOTIF-12)
 
