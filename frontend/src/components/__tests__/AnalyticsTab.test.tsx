@@ -50,7 +50,7 @@ beforeEach(() => vi.clearAllMocks())
 
 describe('AnalyticsTab — Stripe Connect card', () => {
   it('renders "Open Stripe Dashboard" button when chargesEnabled is true', async () => {
-    mockConnectStatus.mockResolvedValue({ chargesEnabled: true })
+    mockConnectStatus.mockResolvedValue({ chargesEnabled: true, stripeConnectAccountId: 'acct_test_001', detailsSubmitted: true })
     render(<AnalyticsTab />)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /open stripe dashboard/i })).toBeInTheDocument()
@@ -59,7 +59,7 @@ describe('AnalyticsTab — Stripe Connect card', () => {
   })
 
   it('renders setup-incomplete note (no button) when chargesEnabled is false', async () => {
-    mockConnectStatus.mockResolvedValue({ chargesEnabled: false })
+    mockConnectStatus.mockResolvedValue({ chargesEnabled: false, stripeConnectAccountId: 'acct_test_001', detailsSubmitted: false })
     render(<AnalyticsTab />)
     await waitFor(() =>
       expect(screen.getByText(/still being set up/i)).toBeInTheDocument()
@@ -69,7 +69,7 @@ describe('AnalyticsTab — Stripe Connect card', () => {
 
   it('calls createConnectLoginLink and redirects on button click', async () => {
     const user = userEvent.setup()
-    mockConnectStatus.mockResolvedValue({ chargesEnabled: true })
+    mockConnectStatus.mockResolvedValue({ chargesEnabled: true, stripeConnectAccountId: 'acct_test_001', detailsSubmitted: true })
     mockCreateLoginLink.mockResolvedValue({
       loginUrl: 'https://connect.stripe.com/express/dashboard/test',
     })
@@ -93,7 +93,7 @@ describe('AnalyticsTab — Stripe Connect card', () => {
 
   it('shows error message when createConnectLoginLink fails', async () => {
     const user = userEvent.setup()
-    mockConnectStatus.mockResolvedValue({ chargesEnabled: true })
+    mockConnectStatus.mockResolvedValue({ chargesEnabled: true, stripeConnectAccountId: 'acct_test_001', detailsSubmitted: true })
     mockCreateLoginLink.mockRejectedValue(new Error('Network error'))
 
     render(<AnalyticsTab />)
