@@ -631,16 +631,16 @@ describe('POST /subscriptions/connect/login-link', () => {
 
   it('returns loginUrl when Connect account is fully set up', async () => {
     const event = makeEvent('POST', '/subscriptions/connect/login-link', { userId: USER_ID })
-    const result = await handler(event as never, makeCtx(USER_ID))
+    const result = await handler(event as never, makeCtx())
     expect(result.statusCode).toBe(200)
-    const body = JSON.parse(result.body)
+    const body = JSON.parse(result.body as string)
     expect(body.loginUrl).toBe('https://connect.stripe.com/express/dashboard/test-login-link')
   })
 
   it('returns 400 when author has no Connect account', async () => {
     await seedAuthorProfile(USER_ID, { stripeConnectAccountId: null, connectChargesEnabled: null })
     const event = makeEvent('POST', '/subscriptions/connect/login-link', { userId: USER_ID })
-    const result = await handler(event as never, makeCtx(USER_ID))
+    const result = await handler(event as never, makeCtx())
     expect(result.statusCode).toBe(400)
     const body = JSON.parse(result.body as string)
     expect(body.error.message).toMatch(/No Stripe Connect account/)
@@ -652,7 +652,7 @@ describe('POST /subscriptions/connect/login-link', () => {
       connectChargesEnabled: false,
     })
     const event = makeEvent('POST', '/subscriptions/connect/login-link', { userId: USER_ID })
-    const result = await handler(event as never, makeCtx(USER_ID))
+    const result = await handler(event as never, makeCtx())
     expect(result.statusCode).toBe(400)
     const body = JSON.parse(result.body as string)
     expect(body.error.message).toMatch(/not complete/)
