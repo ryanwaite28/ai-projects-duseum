@@ -160,3 +160,5 @@ GET /collections?sort=newest&limit=20&cursor=<base64url>
 - [x] Integration tests added to `collections.integration.test.ts`: happy path shape, SUBSCRIBER_ONLY exclusion, empty case, cursor pagination, invalid sort → 400
 - [x] `specs/testing/test-coverage.md` updated with new test entries
 - [x] Spec `**Status**` updated to ✅ Implemented
+- [x] FR-TESTING-06 regression: `BrowseCollectionsPage` renders error state (not empty fallthrough) when API fails — `BrowseCollectionsPage.test.tsx` (5 tests)
+- [x] `scripts/bootstrap.sh` §3.8 `backfill_free_collection_browse_attr` added — patched 3 pre-existing FREE collections in dev, 0 in prod

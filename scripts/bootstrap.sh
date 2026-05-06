@@ -16,6 +16,7 @@
 #       3.5  CI/CD artifact bucket — duseum-cicd-artifacts (shared)
 #       3.6  DynamoDB config table seeding — all required keys (dev + prod)
 #       3.7  Stripe platform subscription product + price (dev + prod, idempotent)
+#       3.8  DynamoDB FREE collection browse attr backfill (dev + prod, idempotent)
 #       4.   CloudFront RSA key pairs + key groups — for signed URLs (dev + prod)
 #       5.   GitHub Actions OIDC provider
 #       6.   GitHub Actions IAM deploy roles
@@ -1275,6 +1276,65 @@ provision_stripe_platform_price() {
 # .secrets.env — leave blank on first run; set on re-runs to skip Stripe API.
 provision_stripe_platform_price "dev"  "$DEV_STRIPE_SK"  "${DEV_STRIPE_PRICE_ID:-}"
 provision_stripe_platform_price "prod" "$PROD_STRIPE_SK" "${PROD_STRIPE_PRICE_ID:-}"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 3.8 — DynamoDB FREE collection browse attr backfill (dev + prod)
+#
+# Collections created before FR-DISC-07 was deployed may lack the sparse
+# collectionBrowse = 'FREE' attribute that GSI-AllFreeCollections relies on.
+# Without this attribute, listFreeCollections() returns empty results and the
+# Browse Collections page shows no content despite collections existing.
+#
+# This step scans the main table for FREE METADATA items missing the attribute
+# and writes collectionBrowse = 'FREE' on each. Idempotent — the
+# attribute_not_exists condition means re-runs are safe no-ops.
+# ═══════════════════════════════════════════════════════════════════════════════
+backfill_free_collection_browse_attr() {
+  local env="$1"
+  local table="duseum-${env}-dynamodb-main"
+
+  step "DynamoDB FREE collection browse attr backfill — ${env}"
+  info "  Scanning ${table} for FREE METADATA items missing collectionBrowse..."
+
+  local items_json
+  items_json=$(aws_cmd dynamodb scan \
+    --table-name "$table" \
+    --filter-expression "SK = :meta AND #vis = :free AND attribute_not_exists(collectionBrowse)" \
+    --expression-attribute-names '{"#vis":"visibility"}' \
+    --expression-attribute-values '{":meta":{"S":"METADATA"},":free":{"S":"FREE"}}' \
+    --projection-expression "PK" \
+    --no-paginate \
+    --output json 2>/dev/null || echo '{"Items":[]}')
+
+  local pks
+  pks=$(echo "$items_json" | jq -r '.Items[].PK.S // empty' 2>/dev/null || echo "")
+
+  if [[ -z "$pks" ]]; then
+    success "  No FREE collections missing collectionBrowse — nothing to backfill"
+    return
+  fi
+
+  local count
+  count=$(echo "$pks" | grep -c .)
+  info "  Found ${count} collection(s) to backfill..."
+
+  while IFS= read -r pk; do
+    [[ -z "$pk" ]] && continue
+    aws_cmd dynamodb update-item \
+      --table-name "$table" \
+      --key "{\"PK\":{\"S\":\"${pk}\"},\"SK\":{\"S\":\"METADATA\"}}" \
+      --update-expression "SET collectionBrowse = :browse" \
+      --expression-attribute-values '{":browse":{"S":"FREE"}}' \
+      --condition-expression "attribute_not_exists(collectionBrowse)" \
+      --output text >/dev/null 2>/dev/null || true
+    success "  ${pk}"
+  done <<< "$pks"
+
+  success "  Backfill complete — ${count} item(s) updated for ${env}"
+}
+
+backfill_free_collection_browse_attr "dev"
+backfill_free_collection_browse_attr "prod"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 4 — CloudFront RSA key pairs + key groups (for signed URLs)
