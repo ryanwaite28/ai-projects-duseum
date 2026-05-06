@@ -740,6 +740,7 @@ if $LOCAL_MODE; then
     # ── subscriptions-lambda ──────────────────────────────────────────────────
     SUB_INT=$(make_integration "subscriptions")
     add_route "GET /subscriptions/me"                              "$SUB_INT"
+    add_route "GET /subscriptions/me/subscribers"                  "$SUB_INT"
     add_route "POST /subscriptions/platform"                       "$SUB_INT"
     add_route "POST /subscriptions/authors/{authorId}"             "$SUB_INT"
     add_route "POST /subscriptions/portal"                         "$SUB_INT"

@@ -642,7 +642,8 @@ describe('POST /subscriptions/connect/login-link', () => {
     const event = makeEvent('POST', '/subscriptions/connect/login-link', { userId: USER_ID })
     const result = await handler(event as never, makeCtx(USER_ID))
     expect(result.statusCode).toBe(400)
-    expect(JSON.parse(result.body).error).toMatch(/No Stripe Connect account/)
+    const body = JSON.parse(result.body as string)
+    expect(body.error.message).toMatch(/No Stripe Connect account/)
   })
 
   it('returns 400 when Connect onboarding is incomplete (connectChargesEnabled = false)', async () => {
@@ -653,7 +654,8 @@ describe('POST /subscriptions/connect/login-link', () => {
     const event = makeEvent('POST', '/subscriptions/connect/login-link', { userId: USER_ID })
     const result = await handler(event as never, makeCtx(USER_ID))
     expect(result.statusCode).toBe(400)
-    expect(JSON.parse(result.body).error).toMatch(/not complete/)
+    const body = JSON.parse(result.body as string)
+    expect(body.error.message).toMatch(/not complete/)
   })
 
   it('returns 401 when no JWT provided', async () => {
