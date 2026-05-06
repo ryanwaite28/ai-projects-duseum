@@ -88,6 +88,19 @@
 | ProfileImageUpload | ProfileImageUpload.test.tsx | idle render, currentUrl preview, no-image placeholder, unsupported MIME error, size error, success+Saved+updateAuthorProfile called, API error, button disabled during upload | ✅ |
 | DailyFeaturedSpotlight | DailyFeaturedSpotlight.test.tsx | skeleton when loading, author content on initial load (reveal regression), follower/subscriber counts, cover photo, null-author fallback, buttons, subscribe CTA | ✅ |
 
+### Author Connect Dashboard Tests — FR-SUB-14
+
+| Scope | What | Status |
+|---|---|---|
+| subscriptions integration | `POST /subscriptions/connect/login-link` returns `loginUrl` when `connectChargesEnabled = true` | ✅ |
+| subscriptions integration | `POST /subscriptions/connect/login-link` → 400 when no `stripeConnectAccountId` | ✅ |
+| subscriptions integration | `POST /subscriptions/connect/login-link` → 400 when `connectChargesEnabled = false` | ✅ |
+| subscriptions integration | `POST /subscriptions/connect/login-link` → 401 when unauthenticated | ✅ |
+| frontend service | `subscriptionsService.createConnectLoginLink()` calls correct URL, returns `{ loginUrl }` | ✅ |
+| frontend component | `AnalyticsTab` renders "Open Stripe Dashboard" button when `chargesEnabled` | ✅ |
+| frontend component | `AnalyticsTab` renders setup-incomplete note when `!chargesEnabled` | ✅ |
+| frontend component | `AnalyticsTab` shows error state when `createConnectLoginLink` fails | ✅ |
+
 ### Zustand Store Regression Tests
 
 | Store | Test file | What is covered | Status |

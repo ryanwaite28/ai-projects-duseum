@@ -10,6 +10,7 @@
 //   POST   /subscriptions/portal                     → createPortalSession     (JWT required)
 //   POST   /subscriptions/connect/onboard            → connectOnboard         (JWT required)
 //   GET    /subscriptions/connect/status             → connectStatus          (JWT required)
+//   POST   /subscriptions/connect/login-link         → connectLoginLink       (JWT required)
 //   POST   /users/me/author/subscription-price       → setSubscriptionPrice   (JWT required)
 // =============================================================================
 
@@ -29,6 +30,7 @@ import { createAuthorCheckout }   from './routes/create-author-checkout.js'
 import { createPortalSession }    from './routes/create-portal-session.js'
 import { connectOnboard }         from './routes/connect-onboard.js'
 import { connectStatus }          from './routes/connect-status.js'
+import { connectLoginLink }       from './routes/connect-login-link.js'
 import { setSubscriptionPrice }   from './routes/set-subscription-price.js'
 
 const dispatch = async (
@@ -56,6 +58,11 @@ const dispatch = async (
   // POST /subscriptions/connect/onboard
   if (method === 'POST' && path.endsWith('/connect/onboard')) {
     return connectOnboard(event, context)
+  }
+
+  // POST /subscriptions/connect/login-link
+  if (method === 'POST' && path.endsWith('/connect/login-link')) {
+    return connectLoginLink(event, context)
   }
 
   // POST /subscriptions/portal
