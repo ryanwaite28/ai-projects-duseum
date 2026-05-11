@@ -5,7 +5,6 @@
 // Resources owned by this stack (Section 5.2):
 //   - CloudFront distribution (SPA)   duseum-{env}-cloudfront-app
 //   - CloudFront distribution (media) duseum-{env}-cloudfront-media
-//   - WAF WebACL (CLOUDFRONT scope)   duseum-{env}-waf-cloudfront
 //   - Route53 A records               {env}.duseum.com, media.{env}.duseum.com
 //   - SSM params                      /duseum/{env}/stacks/cdn/*
 //
@@ -26,7 +25,6 @@ import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
 import * as route53 from 'aws-cdk-lib/aws-route53'
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets'
 import * as ssm from 'aws-cdk-lib/aws-ssm'
-import * as wafv2 from 'aws-cdk-lib/aws-wafv2'
 import { Construct } from 'constructs'
 
 // ── Props ──────────────────────────────────────────────────────────────────────
@@ -95,72 +93,6 @@ export class CdnStack extends cdk.Stack {
     })
 
     // =========================================================================
-    // WAF WebACL — CLOUDFRONT scope (must be us-east-1 with CF)
-    // Section 7.5: managed rules + rate limits
-    // =========================================================================
-
-    const cfWaf = new wafv2.CfnWebACL(this, 'CloudFrontWaf', {
-      name: `duseum-${envName}-waf-cloudfront`,
-      scope: 'CLOUDFRONT',
-      defaultAction: { allow: {} },
-      visibilityConfig: {
-        cloudWatchMetricsEnabled: true,
-        metricName:               `duseum-${envName}-waf-cloudfront`,
-        sampledRequestsEnabled:   true,
-      },
-      rules: [
-        {
-          name:     'AWSManagedRulesCommonRuleSet',
-          priority: 1,
-          overrideAction: { none: {} },
-          visibilityConfig: {
-            cloudWatchMetricsEnabled: true,
-            metricName:               'AWSCommonRuleSet',
-            sampledRequestsEnabled:   true,
-          },
-          statement: {
-            managedRuleGroupStatement: {
-              vendorName: 'AWS',
-              name:       'AWSManagedRulesCommonRuleSet',
-            },
-          },
-        },
-        {
-          name:     'AWSManagedRulesKnownBadInputs',
-          priority: 2,
-          overrideAction: { none: {} },
-          visibilityConfig: {
-            cloudWatchMetricsEnabled: true,
-            metricName:               'AWSKnownBadInputsRuleSet',
-            sampledRequestsEnabled:   true,
-          },
-          statement: {
-            managedRuleGroupStatement: {
-              vendorName: 'AWS',
-              name:       'AWSManagedRulesKnownBadInputsRuleSet',
-            },
-          },
-        },
-        {
-          name:     'CloudFrontRateLimit',
-          priority: 3,
-          action:   { block: {} },
-          visibilityConfig: {
-            cloudWatchMetricsEnabled: true,
-            metricName:               'CloudFrontRateLimit',
-            sampledRequestsEnabled:   true,
-          },
-          statement: {
-            rateBasedStatement: {
-              limit:            1000,
-              aggregateKeyType: 'IP',
-            },
-          },
-        },
-      ],
-    })
-
-    // =========================================================================
     // CloudFront Key Group — references existing key pair (§7.3)
     // Key pair was created outside CDK; ID injected via CDK context.
     // =========================================================================
@@ -212,7 +144,6 @@ export class CdnStack extends cdk.Stack {
           sslSupportMethod:       'sni-only',
           minimumProtocolVersion: 'TLSv1.2_2021',
         },
-        webAclId: cfWaf.attrArn,
         origins: [
           {
             id:         `duseum-${envName}-s3-spa`,
@@ -258,7 +189,6 @@ export class CdnStack extends cdk.Stack {
           sslSupportMethod:       'sni-only',
           minimumProtocolVersion: 'TLSv1.2_2021',
         },
-        webAclId: cfWaf.attrArn,
         origins: [
           {
             id:         `duseum-${envName}-s3-media`,

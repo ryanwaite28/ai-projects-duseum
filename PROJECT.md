@@ -288,7 +288,7 @@ To give artists a beautiful, museum-quality space to share their work — and to
 - **NFR-SEC-03**: Stripe webhook signatures verified on every inbound webhook event
 - **NFR-SEC-04**: S3 bucket for media is not publicly accessible; all reads go through CloudFront with signed URLs for private content
 - **NFR-SEC-05**: All secrets (Stripe keys, DB credentials, JWT config) stored in AWS Secrets Manager; never in environment variables or code
-- **NFR-SEC-06**: WAF (CLOUDFRONT scope) on CloudFront distributions: rate limiting, OWASP common rules, known-bad-inputs rules. API Gateway HTTP API v2 is not supported by WAF REGIONAL; it is protected by Cognito JWT authorizer + stage-level throttling.
+- **NFR-SEC-06**: WAF **intentionally disabled** (cost optimisation — ~$8–10/month saved). CloudFront distributions have no WAF WebACL attached. Remaining protections: HTTPS enforcement, TLS 1.2 minimum, SecurityHeaders response policy on the SPA distribution, Cognito JWT authorizer on API routes, and API Gateway stage-level throttling. WAF can be re-enabled by reverting `CdnStack` to the previous `CfnWebACL` implementation.
 - **NFR-SEC-07**: Private art pieces served via CloudFront signed URLs (TTL: 1 hour); URL signing happens in Lambda, not frontend
 
 ### 3.4 Reliability
@@ -1703,24 +1703,19 @@ Since the Lambda cannot know which endpoint delivered a given message, it tries 
 
 ### 7.5 WAF Rules
 
-**CLOUDFRONT scope only.** WAF REGIONAL is **not** associated with the API Gateway HTTP API — AWS WAF REGIONAL does not support HTTP API v2 (`/apis/{id}/stages/$default` ARN format is rejected by `CfnWebACLAssociation`). WAF REGIONAL only works with API Gateway REST APIs.
+**WAF is intentionally disabled** (cost optimisation). No `CfnWebACL` is attached to either CloudFront distribution. See NFR-SEC-06.
 
-The `CfnWebACL` (scope: `CLOUDFRONT`) lives in `CdnStack` and is attached to both CloudFront distributions (SPA and media). HTTP API v2 protection is provided by the Cognito JWT authorizer and API Gateway stage-level throttling.
+Note: WAF REGIONAL cannot be associated with API Gateway HTTP API v2 regardless — `CfnWebACLAssociation` rejects the `/apis/{id}/stages/$default` ARN format. API-layer protection is provided by the mechanisms below.
 
-**CloudFront WAF rules (CdnStack):**
+**Active protections:**
 
-| Rule | Purpose |
-|---|---|
-| `AWSManagedRulesCommonRuleSet` | OWASP Top 10 protection |
-| `AWSManagedRulesKnownBadInputsRuleSet` | Known malicious payloads |
-| `CloudFrontRateLimit` | Block IPs exceeding 1,000 requests/5-min |
-
-**API Gateway HTTP API protections (ApiStack):**
-
-| Protection | Mechanism |
-|---|---|
-| Authentication | Cognito JWT authorizer on all non-public routes |
-| Rate limiting | API Gateway stage-level default throttling |
+| Layer | Protection | Mechanism |
+|---|---|---|
+| CloudFront | HTTPS enforcement | `viewerProtocolPolicy: redirect-to-https` |
+| CloudFront | TLS minimum | `minimumProtocolVersion: TLSv1.2_2021` |
+| CloudFront (SPA) | Security headers | `SecurityHeaders` managed response-headers policy |
+| API Gateway | Authentication | Cognito JWT authorizer on all non-public routes |
+| API Gateway | Rate limiting | Stage-level default throttling |
 
 ---
 
